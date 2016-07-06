@@ -90,19 +90,31 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 		% guess the feet order from variable names
 		leftMarkerIdx	  = ~cellfun(@isempty,regexp(markerNames, '_L'));
 		rightMarkerIdx	= ~cellfun(@isempty,regexp(markerNames, '_R'));
-
-
+			
 		% extract the first event from all available which is 
 		% the first heel_contact_left defined in the raw
 		% time axis. This point will be used as reference point 
 		% in the sense that we compute event delay from the first
 		% detected heel contact
 		trialIdxRowInMat = str2double(regexp(trialIdx,'\d+','match'));
-		rawOffsetInSeconds = min(rawEventData.data(trialIdxRowInMat,:));
 
-		referenceOffsetInSeconds = min([dataMat.Events.times]);
+		% get column names for raw events
+		if ~isfield(rawEventData,'colheaders')
+				error(' Something wrong with column names in raw events file');
+		else
+				rawEvMask = ~cellfun(@isempty,regexp(rawEventData.colheaders,'(heel|toe)'));
+		end
 
-		thresholds = max(velocData.data(:,or(leftMarkerIdx,rightMarkerIdx))).*0.8;
+		rawOffsetInSeconds = min(rawEventData.data(trialIdxRowInMat,rawEvMask));
+
+		evGroupNames = {dataMat.Events.label};
+		gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
+
+		referenceOffsetInSeconds = min([dataMat.Events(gaitEventGroups).times]);
+
+%		thresholds = max(velocData.data(:,or(leftMarkerIdx,rightMarkerIdx))).*0.8;
+		thresholds = [1.5 1.5];
+			
 
 		% detect peak of the velocity
 		[~,lhLoc] = findpeaks(velocData.data(:,leftMarkerIdx),'MinPeakHeight',...
@@ -115,7 +127,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 
 		newEvent = struct('label',{'peakVeloc_L','peakVeloc_R'},...
 											'times',{times1,times2},...
-											'samples',{times1./400,times2./400},...
+											'samples',{round(times1.*400),round(times2.*400)},...
 											'color',{[.75 0 .75],[1 1 0]},...
 											'epochs',{ones(1,numel(lhLoc)),ones(1,numel(rhLoc))},...
 											'reactTimes',[],...
@@ -127,9 +139,9 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 		figure, plot(dataMat.Time,dataMat.F), 
 				hold on, 
 
-		tmpEvents = [dataMat.Events(1:4).times];
-		peakLeftEvents = [dataMat.Events(5).times];
-		peakRightEvents = [dataMat.Events(6).times];
+		tmpEvents = [dataMat.Events(gaitEventGroups).times];
+		peakLeftEvents = [dataMat.Events(end-1).times];
+		peakRightEvents = [dataMat.Events(end).times];
 
 		plot(repmat(tmpEvents(:)',[2 1]),repmat([min(dataMat.F(:));.5e-3],...
 				[1 numel(tmpEvents)]),'k--');

@@ -64,7 +64,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	nFiles = numel(sInputs);
 
-	DATA_FOLDER='/media/gabri/My Passport/';
+	DATA_FOLDER='/media/lgabri/My Passport/';
 
   trialRejectionFile = fullfile(DATA_FOLDER,'trialRejection.csv');
   [patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
@@ -136,8 +136,12 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			evNames 	= evNames(ord);
 	
 			% count how many strides we have recorded
-			nStrideLeft = sum(strcmp(evNames,'heelcontact_L'))-1; 
-			nStrideRight= sum(strcmp(evNames,'heelcontact_R'))-1; 
+%			nStrideLeft = sum(strcmp(evNames,'heelcontact_L'))-1; 
+%			nStrideRight= sum(strcmp(evNames,'heelcontact_R'))-1; 
+
+			nStrideLeft = sum(strcmp(evNames,'peakVeloc_L'))-1; 
+			nStrideRight= sum(strcmp(evNames,'peakVeloc_R'))-1; 
+						
 			nStrides 		= nStrideLeft + nStrideRight;
 
 			% prepare event mask to reject artefactual or incomplete step
