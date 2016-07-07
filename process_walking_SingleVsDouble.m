@@ -134,6 +134,12 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			% re-order event names accordingly
 			evNames 	= [evLabels{:}];
 			evNames 	= evNames(ord);
+
+			% we filter those events that 
+			peakVelocIdx 	= find(~cellfun(@isempty,regexp(evNames,'peak')));
+			peakVelocMask = peakVelocIdx - 2 > 0 & peakVelocIdx +2 <= numel(evNames);
+
+
 	
 			% count how many strides we have recorded
 %			nStrideLeft = sum(strcmp(evNames,'heelcontact_L'))-1; 
@@ -176,7 +182,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			referenceVector			= [1 referenceStance 800];
 			plotIdx = 1;
 
-			for strideIdx = 3:2:nStrides*2+2
+			for strideIdx = peakVelocIdx(peakVelocMask) 
 
 					% if the stride contains bad steps 
 					% we skip it and continue to the next
@@ -194,6 +200,9 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					normFactor = repmat(mean(dataTF,2),[1 numel(timeWindow) 1]);
 					dataTF 		 = (dataTF-normFactor)./normFactor;
 
+					fprintf('[%d]',strideIdx);
+					fprintf('%s ',evNames{(-2:2) + strideIdx});
+					fprintf('\n');
 					strideRaw	 = signals(:,timeWindow)'.*1e6;
 					f 				 = walkingStruct.Freqs(freqMask);	
 

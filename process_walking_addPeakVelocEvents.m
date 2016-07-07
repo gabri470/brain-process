@@ -67,6 +67,9 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 		subjectIdx = sInput.SubjectName;
 		conditionString = sInput.Condition;
 
+
+		sMat = in_bst_channel(sInput.ChannelFile);
+
 		trialIdx = cell2mat(regexp(conditionString,'trial\d+','match'));
 
 		dataMat = in_bst(sInput.FileName);
@@ -135,8 +138,9 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 
 		dataMat.Events = [dataMat.Events, newEvent];
 
+		tibMask = ~cellfun(@isempty,regexp({sMat.Channel.Name},'sol'));
 
-		figure, plot(dataMat.Time,dataMat.F), 
+		figure, plot(dataMat.Time,dataMat.F(tibMask,:)), 
 				hold on, 
 
 		tmpEvents = [dataMat.Events(gaitEventGroups).times];
@@ -147,10 +151,10 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 				[1 numel(tmpEvents)]),'k--');
 
 		plot(repmat(peakLeftEvents(:)',[2 1]),repmat([min(dataMat.F(:));.5e-3],...
-				[1 numel(peakLeftEvents)]),'g--');
+				[1 numel(peakLeftEvents)]),'b--');
 
 		plot(repmat(peakRightEvents(:)',[2 1]),repmat([min(dataMat.F(:));.5e-3],...
-				[1 numel(peakRightEvents)]),'y--');
+				[1 numel(peakRightEvents)]),'g--');
 
 
 		plot(velocData.data(:,1)-rawOffsetInSeconds+referenceOffsetInSeconds,...
@@ -160,14 +164,4 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 		STUDY_DIR = bst_get('ProtocolInfo');
 		bst_save(fullfile(STUDY_DIR.STUDIES,sInput.FileName),dataMat);
 
-		
-
 end
-
-
-%%% ===== COMPUTE =====
-%function A = Compute(A, iBaseline)
-%
-%end
-
-
