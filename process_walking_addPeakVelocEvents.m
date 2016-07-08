@@ -115,7 +115,6 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 
 		referenceOffsetInSeconds = min([dataMat.Events(gaitEventGroups).times]);
 
-%		thresholds = max(velocData.data(:,or(leftMarkerIdx,rightMarkerIdx))).*0.8;
 		thresholds = [1.5 1.5];
 			
 
@@ -138,7 +137,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 
 		dataMat.Events = [dataMat.Events, newEvent];
 
-		tibMask = ~cellfun(@isempty,regexp({sMat.Channel.Name},'sol'));
+		tibMask = ~cellfun(@isempty,regexp({sMat.Channel.Name},'(sol|[L|R]S_emg)'));
 
 		figure, plot(dataMat.Time,dataMat.F(tibMask,:)), 
 				hold on, 
