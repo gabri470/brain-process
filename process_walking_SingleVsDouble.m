@@ -19,7 +19,6 @@ function varargout = process_walking_singlevsDouble( varargin )
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-% Authors: Francois Tadel, 2013
 
 macro_methodcall;
 end
@@ -49,6 +48,10 @@ function sProcess = GetDescription() %#ok<DEFNU>
 		sProcess.options.saveOutput.Comment = 'Save output to brainstormDB';
 		sProcess.options.saveOutput.Type    = 'checkbox';
 		sProcess.options.saveOutput.Value   = false;
+		sProcess.options.normOnStride.Comment = 'Normalize on Stride';
+		sProcess.options.normOnStride.Type = 'checkbox';
+		sProcess.options.normOnStride.Value= false';
+	
 
 end
 
@@ -77,7 +80,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	
 	currentSubject=[];
 	subjectIdx = 0;
-	subjectNameOrdered = cell(nSubjects,1);	OutputFiles = {};
+	subjectNameOrdered = cell(nSubjects,1);
+	OutputFiles = {};
 
 
 	for fileIdx = 1:nFiles; 
@@ -98,16 +102,17 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 				currentSubject = sInputs(fileIdx).SubjectName;
 				subjectIdx = subjectIdx + 1;
 				subjectNameOrdered{subjectIdx} = sInputs(fileIdx).SubjectName;
+				fprintf('Analyzing %s\n',sInputs(fileIdx).SubjectName);
 			end
 
 
 			% we need to read the angular velocity
 			% and in order to do that we need to understand what trial and 
 			% which sujbect we are analysing
-			conditionString = regexp(sInputs(fileIdx).Condition,'trial\d+','match');
-		  angVelocityFile = fullfile(DATA_FOLDER,currentSubject,...
-																strcat(currentSubject,'_walking',...
-																				conditionString,'.txt'));
+%			conditionString = regexp(sInputs(fileIdx).Condition,'trial\d+','match');
+%		  angVelocityFile = fullfile(DATA_FOLDER,currentSubject,...
+%																strcat(currentSubject,'_walking',...
+%																				conditionString,'.txt'));
 
 
 			
@@ -116,7 +121,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			% filter cardiac events from gait-related events
 			evGroupNames = {parentData.Events.label};
-			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'[heel|toe]'));
+			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe|peakVeloc)'));
 
 			% concat all heel contact events in order to have
 			% a vector of latencies of this form: e.g.
@@ -124,10 +129,13 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			[strideStart,ord]		= sort([parentData.Events(gaitEventGroups).samples]);
 
 			% extract event names
+			evLabels = cell(1,sum(gaitEventGroups));
+			evLabelsIdx = 1;
 			for evIdx = find(gaitEventGroups)
 			
-					evLabels{:,evIdx} = repmat({parentData.Events(evIdx).label},...
+					evLabels{evLabelsIdx} = repmat({parentData.Events(evIdx).label},...
 							[1 numel(parentData.Events(evIdx).samples)]);		
+					evLabelsIdx = evLabelsIdx + 1;
 
 			end
 
@@ -139,8 +147,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			peakVelocIdx 	= find(~cellfun(@isempty,regexp(evNames,'peak')));
 			peakVelocMask = peakVelocIdx - 2 > 0 & peakVelocIdx +2 <= numel(evNames);
 
-
-	
 			% count how many strides we have recorded
 %			nStrideLeft = sum(strcmp(evNames,'heelcontact_L'))-1; 
 %			nStrideRight= sum(strcmp(evNames,'heelcontact_R'))-1; 
@@ -174,19 +180,34 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			referenceTimeVector = -1:1/fs:(1-1/fs);
 			doubleSuppDur 			= floor(0.19*fs);
 			singleSuppDur 			= floor(0.4*fs);
+			acPhaseDur					= floor((.4*2/3)*fs);
+			decPhaseDur					= floor((.4/3)*fs);
 
-			referenceStance 		= 400 + [ -doubleSuppDur-singleSuppDur ...
-																				-singleSuppDur 0 +doubleSuppDur ...
-																		+doubleSuppDur+singleSuppDur ];
+
+			referenceStance 		= 400 + [ -doubleSuppDur-acPhaseDur...
+																				-acPhaseDur 0 +decPhaseDur ...
+																		+doubleSuppDur+decPhaseDur ];
+
+%			referenceStance 		= 400 + [ -doubleSuppDur-singleSuppDur ...
+%																				-singleSuppDur 0 +doubleSuppDur ...
+%																		+doubleSuppDur+singleSuppDur ];
 
 			referenceVector			= [1 referenceStance 800];
 			plotIdx = 1;
 
 			for strideIdx = peakVelocIdx(peakVelocMask) 
 
+					% check that data are order correctly for each stride
+
+					matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
+																			'peakVeloc_[R|L]',...
+															'heelcontact_[R|L]','toeoff_[L|R]'};
+					orderCheck = sum(cellfun(@isempty,cellfun(@regexp,evNames((-2:2)+strideIdx),...
+																									matchingString,'uni',false)));
+
 					% if the stride contains bad steps 
 					% we skip it and continue to the next
-					if ismember(plotIdx,strideRej)
+					if ismember(plotIdx,strideRej) || orderCheck > 0
 							plotIdx = plotIdx + 1;
 							continue;
 					end
@@ -197,8 +218,20 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					timeWindow = strideStart(strideIdx) + (-399:400);
 					freqMask 	 = walkingStruct.Freqs > 6;
 					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask).*1e12;
-					normFactor = repmat(mean(dataTF,2),[1 numel(timeWindow) 1]);
-					dataTF 		 = (dataTF-normFactor)./normFactor;
+
+					if (sProcess.options.normOnStride.Value) 
+							% normalize on stride
+							normFactor = repmat(mean(dataTF,2),[1 numel(timeWindow) 1]);
+							dataTF 		 = (dataTF-normFactor)./normFactor;
+					else
+							% normalize on swing only
+							% this means that we are not normalizing here 
+							% but do it later after warping
+							% for simplicity in the code. NOT SURE IF THIS IS THE CORRECT WAY
+							% TODO check whether we have an effect of normalization order
+ 
+					end
+
 
 					fprintf('[%d]',strideIdx);
 					fprintf('%s ',evNames{(-2:2) + strideIdx});
@@ -237,7 +270,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					end
 
 					footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
-					footLabel				= footLabel{:}{:}; % this is the label of the central hc 
+					footLabel				= footLabel{:}{:}; % this is the label of the central event 
 
 					plotOrderStride	= plotOrder(plotIdx,:);
 
@@ -271,6 +304,14 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 								stnIdx					= 2;
 							end
 					end
+
+					if(~sProcess.options.normOnStride.Value)
+							finalTF = bsxfun(@rdivide,bsxfun(@minus,finalTF,...
+																		mean(finalTF(:,referenceStance(2):referenceStance(3),:),2)),...
+																		std(finalTF(:,referenceStance(2):referenceStance(3),:),[],2));
+					end
+																		
+																								
 					
 					% we save for each subject the time-warped ERSD normalized over***
 					stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
@@ -352,9 +393,9 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
 	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
 
-	fname = fullfile('/home','lgabri','Desktop',...
-										'walking',folder,'wavelet','avgERSD.ps');
-
-	print(f2,'-dpsc2',fname);
+%	fname = fullfile('/home','lgabri','Desktop',...
+%										'walking',folder,'wavelet','avgERSD.ps');
+%
+%	print(f2,'-dpsc2',fname);
 
 end % function
