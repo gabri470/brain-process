@@ -305,17 +305,20 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							end
 					end
 
+					
+					% we save for each subject the time-warped ERSD normalized over***
+					stnRawResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
+																								finalTF(controLatIdx,:,:));
+
 					if(~sProcess.options.normOnStride.Value)
 							finalTF = bsxfun(@rdivide,bsxfun(@minus,finalTF,...
 																		mean(finalTF(:,referenceStance(2):referenceStance(3),:),2)),...
 																		std(finalTF(:,referenceStance(2):referenceStance(3),:),[],2));
 					end
-																		
-																								
-					
-					% we save for each subject the time-warped ERSD normalized over***
+
 					stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
 																								finalTF(controLatIdx,:,:));
+
 
 					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
 					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
@@ -365,12 +368,16 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	% stnResults holds ERSD for each stride divide as STN-/+
 	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
-								'paperunits','normalized','paperorientation',...
+							 'paperunits','normalized','paperorientation',...
 								'portrait','Visible','on');
-	
+
+
 	folder = 'original';
 
 	for ii = 1:nSubjects
+
+%			pvalue(:,1) = runPermutationTest(stnMeans{ii,1},stnRawResults{ii,1},100,referenceStance);
+%			pvalue(:,2) = runPermutationTest(stnMeans{ii,2},stnRawResults{ii,2},100,referenceStance);
 
 			% this is the STN- 
 			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add')
@@ -393,9 +400,78 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
 	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
 
+	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
+							 'paperunits','normalized','paperorientation',...
+								'portrait','Visible','on');
+
+	betaMask = f >= 6 & f <= 13;
+	gammaMask  = f > 13 & f < 80;
+	for ii = 1:nSubjects
+
+%			pvalue(:,1) = runPermutationTest(stnMeans{ii,1},stnRawResults{ii,1},100,referenceStance);
+%			pvalue(:,2) = runPermutationTest(stnMeans{ii,2},stnRawResults{ii,2},100,referenceStance);
+	
+			stnMostAff = squeeze(stnMeans{ii,1});
+			stnLessAff = squeeze(stnMeans{ii,2});
+
+			% this is the STN- 
+			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add')
+			plot(tAxis,mean(stnMostAff(:,betaMask),2),'r');
+			plot(tAxis,mean(stnMostAff(:,gammaMask),2),'b');
+			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+						
+			subplot(nSubjects,2,2*(ii-1)+2,'NextPlot','add')
+			plot(tAxis,mean(stnLessAff(:,betaMask),2),'r');
+			plot(tAxis,mean(stnLessAff(:,gammaMask),2),'b');
+			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+
+	end
+	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
+	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
 %	fname = fullfile('/home','lgabri','Desktop',...
 %										'walking',folder,'wavelet','avgERSD.ps');
 %
 %	print(f2,'-dpsc2',fname);
 
 end % function
+
+function pvalue = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStance)
+%RUNPERMUTATIONTEST Description
+%	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
+%
+		pvalue  	= zeros(84,1);
+		nSwing  	= size(dataRaw,1);
+
+		dataPerm	= dataRaw;
+
+		% we perform a permutation test for each STN separatelly
+		for permIdx = 1:nPermutation
+
+			for swingIdx = 1:nSwing
+
+				dataPerm(swingIdx,:,:) = randCircShift(dataRaw(swingIdx,:,:)); 
+
+			end
+			
+			% compute permutated statistics
+			dataPerm = bsxfun(@rdivide,bsxfun(@minus,dataPerm,...
+									mean(dataPerm(:,referenceStance(2):referenceStance(3),:),2),...
+									 std(dataPerm(:,referenceStance(2):referenceStance(3),:),[],2)));
+
+			dataPerm = squeeze(mean(mean(dataPerm),2));
+
+			pvalue = pvalue + double(dataPerm > dataObs)./nPermutation;
+
+		end
+
+end
+
+function A = randCircShift(A)
+
+		idx = randi(numel(A),1);
+		A 	= [A(idx:end) A(1:idx-1)];
+
+end
+
