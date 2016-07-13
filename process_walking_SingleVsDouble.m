@@ -376,12 +376,16 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	for ii = 1:nSubjects
 
-%			pvalue(:,1) = runPermutationTest(stnMeans{ii,1},stnRawResults{ii,1},100,referenceStance);
-%			pvalue(:,2) = runPermutationTest(stnMeans{ii,2},stnRawResults{ii,2},100,referenceStance);
+			pvalue(1,:,:) = runPermutationTest(stnMeans{ii,1},stnRawResults{ii,1},100,referenceStance);
+			pvalue(2,:,:) = runPermutationTest(stnMeans{ii,2},stnRawResults{ii,2},100,referenceStance);
+
+
+			statSignificance = nan(size(pvalue));
+			statSignificance(pvalue < 0.05) = 1;
 
 			% this is the STN- 
 			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add')
-			imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
+			imagesc(tAxis,f,squeeze(statSignificance(1,:,:).*stnMeans{ii,1})',zLimit);
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
 			axis xy;
 			set(gca,'XTickLabel',[]);
@@ -389,7 +393,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			ylim([6 80]);
 			
 			subplot(nSubjects,2,2*(ii-1)+2,'NextPlot','add')
-			imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
+			imagesc(tAxis,f,squeeze(statSignificance(2,:,:).*stnMeans{ii,2})',zLimit);
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			axis xy;
@@ -408,9 +412,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	gammaMask  = f > 13 & f < 80;
 	for ii = 1:nSubjects
 
-%			pvalue(:,1) = runPermutationTest(stnMeans{ii,1},stnRawResults{ii,1},100,referenceStance);
-%			pvalue(:,2) = runPermutationTest(stnMeans{ii,2},stnRawResults{ii,2},100,referenceStance);
-	
 			stnMostAff = squeeze(stnMeans{ii,1});
 			stnLessAff = squeeze(stnMeans{ii,2});
 
@@ -441,14 +442,16 @@ function pvalue = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStanc
 %RUNPERMUTATIONTEST Description
 %	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
 %
-		pvalue  	= zeros(84,1);
+		pvalue  	= zeros(1,800,84);
 		nSwing  	= size(dataRaw,1);
 
 		dataPerm	= dataRaw;
 
 		% we perform a permutation test for each STN separatelly
 		for permIdx = 1:nPermutation
-
+			
+			% for each swing we randomly split the signal in two chunks 
+			% and rotate them
 			for swingIdx = 1:nSwing
 
 				dataPerm(swingIdx,:,:) = randCircShift(dataRaw(swingIdx,:,:)); 
@@ -457,21 +460,42 @@ function pvalue = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStanc
 			
 			% compute permutated statistics
 			dataPerm = bsxfun(@rdivide,bsxfun(@minus,dataPerm,...
-									mean(dataPerm(:,referenceStance(2):referenceStance(3),:),2),...
-									 std(dataPerm(:,referenceStance(2):referenceStance(3),:),[],2)));
+									mean(dataPerm(:,referenceStance(2):referenceStance(3),:),2)),...
+									 std(dataPerm(:,referenceStance(2):referenceStance(3),:),[],2));
 
-			dataPerm = squeeze(mean(mean(dataPerm),2));
+			% average across swing
+			dataPerm = mean(dataPerm);
 
+			% compute pvalues for all frequencies and all time points.
 			pvalue = pvalue + double(dataPerm > dataObs)./nPermutation;
 
 		end
+
+%		pvalue = fdrCorrection(pvalue,0.05);
 
 end
 
 function A = randCircShift(A)
 
-		idx = randi(numel(A),1);
-		A 	= [A(idx:end) A(1:idx-1)];
+		idx 			= randi(size(A,2),1);
+		A(1,:,:) 	= cat(2,A(1,idx:end,:),A(1,1:idx-1,:));
 
 end
 
+function pvalue = fdrCorrection(pvalue, alpha)
+%FDRCORRECTION Description
+%	PVALUE  = FDRCORRECTION() Long description
+%
+
+	tmpPvalue = pvalue(:);
+	N = numel(pvalue);
+	K = N*alpha;
+	tmpPvalue = sort(tmpPvalue);
+	b = tmpPvalue(end-K:end);
+
+	[~,loc] = ismember(tmpPvalue,b);
+	tmpPvalue(loc) = 1;
+	pvalue = reshape(tmpPvalue,size(pvalue));
+	
+	
+end
