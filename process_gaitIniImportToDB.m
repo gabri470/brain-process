@@ -28,10 +28,10 @@ end
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
     % Description the process
-    sProcess.Comment     = 'GaitIni - import recordings';
+    sProcess.Comment     = 'Relative Change';
     sProcess.FileTag     = '';
     sProcess.Category    = 'Custom';
-    sProcess.SubGroup    = 'Import recordings';
+    sProcess.SubGroup    = 'GaitIni';
     sProcess.Index       = 1000;
     % Definition of the input accepted by this process
     sProcess.InputTypes  = {'timefreq'};
@@ -39,18 +39,18 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.nInputs     = 1;
     sProcess.nMinFiles   = 1;
     % Definition of the options
-    % === OPTION EXAMPLE
-    sProcess.options.example1.Comment = {'Choice 1', 'Choice 2', 'Choice 3'};
-    sProcess.options.example1.Type    = 'radio';
-    sProcess.options.example1.Value   = 1;
-    % === OPTION EXAMPLE
-    sProcess.options.example2.Comment = 'Example option 2';
-    sProcess.options.example2.Type    = 'checkbox';
-    sProcess.options.example2.Value   = 1;
-    % === OPTION EXAMPLE
-    sProcess.options.example3.Comment = 'Example option 3: ';
-    sProcess.options.example3.Type    = 'value';
-    sProcess.options.example3.Value   = {5, 'units', 2};
+%    % === OPTION EXAMPLE
+%    sProcess.options.example1.Comment = {'Choice 1', 'Choice 2', 'Choice 3'};
+%    sProcess.options.example1.Type    = 'radio';
+%    sProcess.options.example1.Value   = 1;
+%    % === OPTION EXAMPLE
+%    sProcess.options.example2.Comment = 'Example option 2';
+%    sProcess.options.example2.Type    = 'checkbox';
+%    sProcess.options.example2.Value   = 1;
+%    % === OPTION EXAMPLE
+%    sProcess.options.example3.Comment = 'Example option 3: ';
+%    sProcess.options.example3.Type    = 'value';
+%    sProcess.options.example3.Value   = {5, 'units', 2};
 end
 
 

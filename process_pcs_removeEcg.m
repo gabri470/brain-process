@@ -60,9 +60,11 @@ function sInputs = Run(sProcess, sInputs) %#ok<DEFNU>
 				ChannelMat = in_bst_channel(sInputs.ChannelFile);
 				iChannels = channel_find(ChannelMat.Channel,'SEEG');
 
-				evCardiacIdx = find(ismember([{DataMat.Events.label}],'cardiac'));
+				evCardiacIdx = find(ismember({DataMat.Events.label},'cardiac'));
 
-				offset = round(DataMat.Time(1)*400);
+				fs = round(1/mean(diff(DataMat.Time)));
+
+				offset = round(DataMat.Time(1)*fs);
 
 				evCardiacSamples = DataMat.Events(evCardiacIdx).samples - offset;
 				timeWnd= bsxfun(@plus,(round(-100*.4):round(500*.4)),evCardiacSamples')';

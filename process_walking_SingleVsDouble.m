@@ -376,24 +376,29 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	for ii = 1:nSubjects
 
-			pvalue(1,:,:) = runPermutationTest(stnMeans{ii,1},stnRawResults{ii,1},100,referenceStance);
-			pvalue(2,:,:) = runPermutationTest(stnMeans{ii,2},stnRawResults{ii,2},100,referenceStance);
+			[pvalue(1,:,:), unCorrPvalue(1,:,:)] = runPermutationTest(stnMeans{ii,1},...
+																										stnRawResults{ii,1},100,referenceStance);
+			[pvalue(2,:,:), unCorrPvalue(2,:,:)] = runPermutationTest(stnMeans{ii,2},...
+																										stnRawResults{ii,2},100,referenceStance);
 
 
-			statSignificance = nan(size(pvalue));
+			statSignificance = ones(size(pvalue)).*0.05;
+			statSignificance(unCorrPvalue < 0.05) = 0.6;
 			statSignificance(pvalue < 0.05) = 1;
 
 			% this is the STN- 
-			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add')
-			imagesc(tAxis,f,squeeze(statSignificance(1,:,:).*stnMeans{ii,1})',zLimit);
+			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add');
+			h = imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
+			set(h,'AlphaData',squeeze(statSignificance(1,:,:))');
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
 			axis xy;
 			set(gca,'XTickLabel',[]);
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			ylim([6 80]);
 			
-			subplot(nSubjects,2,2*(ii-1)+2,'NextPlot','add')
-			imagesc(tAxis,f,squeeze(statSignificance(2,:,:).*stnMeans{ii,2})',zLimit);
+			subplot(nSubjects,2,2*(ii-1)+2,'NextPlot','add');
+			h = imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
+			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			axis xy;
@@ -438,7 +443,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 end % function
 
-function pvalue = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStance)
+function [pvalue, unCorrpvalue] = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStance)
 %RUNPERMUTATIONTEST Description
 %	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
 %
@@ -470,8 +475,8 @@ function pvalue = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStanc
 			pvalue = pvalue + double(dataPerm > dataObs)./nPermutation;
 
 		end
-
-%		pvalue = fdrCorrection(pvalue,0.05);
+		unCorrpvalue = pvalue;
+		pvalue = fdrCorrection(pvalue,0.05);
 
 end
 
@@ -487,15 +492,23 @@ function pvalue = fdrCorrection(pvalue, alpha)
 %	PVALUE  = FDRCORRECTION() Long description
 %
 
-	tmpPvalue = pvalue(:);
-	N = numel(pvalue);
-	K = N*alpha;
-	tmpPvalue = sort(tmpPvalue);
-	b = tmpPvalue(end-K:end);
-
-	[~,loc] = ismember(tmpPvalue,b);
-	tmpPvalue(loc) = 1;
-	pvalue = reshape(tmpPvalue,size(pvalue));
-	
-	
+	tmpPvalue 	= sort(pvalue(:));
+	N 					= numel(pvalue);
+	FDR 				= alpha.*(1:N)./N;
+	thr 				= FDR(find(tmpPvalue <= FDR',1,'last'));
+	pvalue(pvalue >= thr) = 1;
+%	K 					= N*alpha;
+%	ttmpPvalue	= sort(tmpPvalue(tmpPvalue < alpha));
+%
+%	if( numel(ttmpPvalue) > K)
+%			b	= ttmpPvalue(end-K:end);
+%
+%			loc = arrayfun(@(x) find( tmpPvalue == x ), unique(b),'uni',false);
+%			loc = cat(1,loc{:});
+%			tmpPvalue(loc) = 1;
+%			pvalue = reshape(tmpPvalue,size(pvalue));
+%	else
+%			pvalue = ones(size(pvalue));
+%	end
+%	
 end
