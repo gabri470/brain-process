@@ -120,11 +120,13 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 				subjectNameOrdered{subjectIdx} = sInputs(fileIdx).SubjectName;
 			end
 
+			fprintf('Analyzing %s\n',sInputs(fileIdx).SubjectName);
+
 			fs = round(1/mean(diff( parentData.Time )));
 
 			% filter cardiac events from gait-related events
 			evGroupNames = {parentData.Events.label};
-			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'[heel|toe]'));
+			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
 
 			% concat all heel contact events in order to have
 			% a vector of latencies of this form: e.g.
@@ -144,15 +146,15 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			evNames 	= evNames(ord);
 	
 			% count how many strides we have recorded
-			nStrideLeft 	= sum(strcmp(evNames,'heelcontact_L'))-1; 
-			nStrideRight	= sum(strcmp(evNames,'heelcontact_R'))-1; 
-			nStrides 			= nStrideLeft + nStrideRight;
+			nStrideLeft = sum(strcmp(evNames,'heelcontact_L'))-1; 
+			nStrideRight= sum(strcmp(evNames,'heelcontact_R'))-1; 
+			nStrides 		= nStrideLeft + nStrideRight;
 
 			% prepare event mask to reject artefactual or incomplete step
-			trialString 	= regexp(sInputs(fileIdx).Condition,'trial\d+','match');
-			subjMask 			= ismember(lower(patNames),lower(sInputs(fileIdx).SubjectName)); 
-			trialMask 		= (ismember(lower(trialStrings),lower(trialString)));
-			stepRej  			= stepIds(and(subjMask,trialMask));
+			trialString = regexp(sInputs(fileIdx).Condition,'trial\d+','match');
+			subjMask 		= ismember(lower(patNames),lower(sInputs(fileIdx).SubjectName)); 
+			trialMask 	= (ismember(lower(trialStrings),lower(trialString)));
+			stepRej  		= stepIds(and(subjMask,trialMask));
 
 			% stride mask each stride is composed by two steps
 			strideIndexes = [1:nStrides;2:nStrides+1]';
@@ -182,12 +184,44 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			for strideIdx = 3:2:nStrides*2+2
 
-
 					% if the stride contains bad steps 
 					% we skip it and continue to the next
 					if ismember(plotIdx,strideRej)
 							plotIdx = plotIdx + 1;
 							continue;
+					end
+
+					footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
+					footLabel				= footLabel{:}{:}; % this is the label of the central hc 
+
+%					plotOrderStride	= plotOrder(plotIdx,:);
+
+					% we need to switch foot Label since a left foot stride
+					% will have a hcR event as central (t0) event
+					% stnIdx are ordered as STN- first and STN+ next
+					if strcmp(footLabel,'L')
+							% right foot stride
+							footLabel 	 = 'R';
+							controLatIdx = 2;
+							if strcmp(mostAffSide,'L')
+%								plotOrderStride	= plotOrderStride{1};
+								stnIdx					= 1;
+							else 
+%								plotOrderStride = plotOrderStride{2};
+								stnIdx					= 2;
+							end
+					else 
+
+							% left foot stride
+							footLabel 	 = 'L';
+							controLatIdx = 1;
+							if strcmp(mostAffSide,'L')
+%								plotOrderStride	= plotOrderStride{2};
+								stnIdx					= 2;
+							else 
+%								plotOrderStride = plotOrderStride{1};
+								stnIdx					= 1;
+							end
 					end
 
 					%								[ idx ] 	
@@ -196,8 +230,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					timeWindow = strideStart(strideIdx) + (-399:400);
 					freqMask 	 = walkingStruct.Freqs > 6;
 					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
-
-			
 
 					strideRaw	 = signals(:,timeWindow)'.*1e6;
 					f 				 = walkingStruct.Freqs(freqMask);	
@@ -209,7 +241,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					if sProcess.options.doWarping.Value
 
 							% compute the mixing matrix that maps the single orignal
-							% stance on the normalized stance
+							% stride on the normalized stride
 							mixingMatrix 	 = mytimewarp(referenceVector,originalVector,3);
 
 							% apply warping at each channel separately for both TF 
@@ -234,42 +266,18 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							finalTF 	= dataTF.*1e12;
 							finalRaw	= strideRaw';
 							zLimit 		= [min(finalTF(:)) max(finalTF(:))];
+							% tf_* -> hc_*
+							stanceWnd	= originalVector(3):originalVector(4);
+							% tf_* -> hc_*
+							swingWnd	= originalVector(5):originalVector(6);
+
 							tAxis			= (-399:400)/fs;
 							tEvAxis 	= repmat(originalVector([3 4 5])./400,2, 1);
 					end
-
-					footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
-					footLabel				= footLabel{:}{:}; % this is the label of the central hc 
-
-					plotOrderStride	= plotOrder(plotIdx,:);
-
-					% we need to switch foot Label since a left foot stride
-					% will have a hcR event as central (t0) event
-					% stnIdx are ordered as STN- first and STN+ next
-					if strcmp(footLabel,'L')
-							% right foot stride
-							footLabel 	 = 'R';
-							controLatIdx = 2;
-							if strcmp(mostAffSide,'L')
-								plotOrderStride	= plotOrderStride{1};
-								stnIdx					= 1;
-							else 
-								plotOrderStride = plotOrderStride{2};
-								stnIdx					= 2;
-							end
-					else 
-
-							% left foot stride
-							footLabel 	 = 'L';
-							controLatIdx = 1;
-							if strcmp(mostAffSide,'L')
-								plotOrderStride	= plotOrderStride{2};
-								stnIdx					= 2;
-							else 
-								plotOrderStride = plotOrderStride{1};
-								stnIdx					=1;
-							end
-					end
+					% here depending on the options chosen we might 
+					% end up having a time-warped data with fixed stride lengths
+					% or individual stride lenghts with their original data
+					% thus we need to account for different sizes
 
 					if sProcess.options.normalizeOnStride.Value
 							normFactor 	= repmat(mean(finalTF,2),[1 numel(timeWindow) 1]);
@@ -277,14 +285,11 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							swingData 	= A(controLatIdx,swingWnd,:);
 							stanceData	= A(controLatIdx,stanceWnd,:);
 
-					end
+					else
+							swingData = finalTF(controLatIdx,swingWnd,:);
+							stanceData = finalTF(controLatIdx,stanceWnd,:);
 
-					% for each subject and stn-(1)/+(2) we save the time-averaged 
-					% swing and stance power
-					swingTcourse{subjectIdx,stnIdx} = ...
-							cat(1,swingTcourse{subjectIdx,stnIdx},swingData);
-					stanceTcourse{subjectIdx,stnIdx} = ...
-							cat(1,stanceTcourse{subjectIdx,stnIdx},stanceData);
+					end
 
 					if strcmp(sProcess.options.method.Value,'zscore')
 						% z score swing									
@@ -315,41 +320,55 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 					end
 
+					if sProcess.options.doWarping.Value
+							stnResults{subjectIdx,stnIdx} = ...
+																cat(1,stnResults{subjectIdx,stnIdx},...
+																finalTFZScored(controLatIdx,:,:));
 
-					stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
-																									finalTFZScored(controLatIdx,:,:));
-
-					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
-					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
-					
-					if sProcess.options.saveOutput.Value
-							% save each stance in separate file
-							% get the output study
-							iStudy 						= sInputs(fileIdx).iStudy;
-							DataMat 					= walkingStruct;
-							DataMat.Freqs			= f;
-							DataMat.Time			= time;
-							DataMat.TF        = finalTF;
-							DataMat.DataType  = 'data';
-							DataMat.Comment		= sprintf('Stride %s (#%d)',footLabel,plotIdx);
-										
-							% Create a default output filename 
-							OutputFiles{fileIdx} = bst_process('GetNewFilename', ...
-									fileparts(sInputs(fileIdx).FileName), 'timefreq');
-
-							% Save on disk
-							save(OutputFiles{fileIdx}, '-struct', 'DataMat');
-
-							% Register in database
-							db_add_data(iStudy, OutputFiles{fileIdx}, DataMat);
-
+							% for each subject and stn-(1)/+(2) we save the time-averaged 
+							% swing and stance power
+							swingTcourse{subjectIdx,stnIdx} = ...
+									cat(1,swingTcourse{subjectIdx,stnIdx},swingData);
+							stanceTcourse{subjectIdx,stnIdx} = ...
+									cat(1,stanceTcourse{subjectIdx,stnIdx},stanceData);
+					else
+							stnResults{subjectIdx,stnIdx} = ...
+										cat(1,stnResults{subjectIdx,stnIdx},...
+										squeeze(mean(finalTFZScored(controLatIdx,:,:),2))');
 					end
+%
+%					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
+%					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
+%					
+%					if sProcess.options.saveOutput.Value
+%							% save each stance in separate file
+%							% get the output study
+%							iStudy 						= sInputs(fileIdx).iStudy;
+%							DataMat 					= walkingStruct;
+%							DataMat.Freqs			= f;
+%							DataMat.Time			= time;
+%							DataMat.TF        = finalTF;
+%							DataMat.DataType  = 'data';
+%							DataMat.Comment		= sprintf('Stride %s (#%d)',footLabel,plotIdx);
+%										
+%							% Create a default output filename 
+%							OutputFiles{fileIdx} = bst_process('GetNewFilename', ...
+%									fileparts(sInputs(fileIdx).FileName), 'timefreq');
+%
+%							% Save on disk
+%							save(OutputFiles{fileIdx}, '-struct', 'DataMat');
+%
+%							% Register in database
+%							db_add_data(iStudy, OutputFiles{fileIdx}, DataMat);
+%
+%					end
 					plotIdx = plotIdx + 1;
 					clear finalTF;
 
 			end % for stride
 
 			clear finalTF;
+			clear strideStart;
 
 	end % for sInputs files
 
@@ -359,10 +378,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	% We first average each element of stnResults across time in order to have 
 	% a frequency modulation
 	stnMeans	 = cellfun(@mean,stnResults,'UniformOutput',false);
-%	stanceTAvg = cellfun(@mean,stanceTcourse,...
-%									repmat({2},size(stanceTcourse)),'UniformOutput',false);
-%	swingTAvg = cellfun(@mean,swingTcourse,...
-%									repmat({2},size(swingTcourse)),'UniformOutput',false);
+	stanceTAvg = cellfun(@mean,stanceTcourse,...
+									repmat({2},size(stanceTcourse)),'UniformOutput',false);
+	swingTAvg = cellfun(@mean,swingTcourse,...
+									repmat({2},size(swingTcourse)),'UniformOutput',false);
 
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
 			'paperunits','normalized','paperorientation','portrait','Visible','on');
@@ -372,25 +391,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	for ii = 1:nSubjects
 
-%		if strcmp(sProcess.options.statMethod,'wilcoxon') 
-%				% for each STN-/+ and for each frequency we compute the wilcoxon 
-%				% ranksum test to compare stance and swing periods in terms of 
-%				% beta power
-%				pvalue(freqPoint,1) = ranksum(stanceTAvg{ii,1}(freqPoint,:),...
-%																			swingTAvg{ii,1}(freqPoint,:));
-%				pvalue(freqPoint,2) = ranksum(stanceTAvg{ii,2}(freqPoint,:),...
-%																			swingTAvg{ii,2}(freqPoint,:));
-%		elseif strcmp(sProcess.options.statMethod,'permutation')
-
-	
-%		else
-%		end
-			
-
-			pvalue(:,1) = runPermutationTest(stnMeans{ii,1},stanceTcourse{ii,1},...
-																			swingTcourse{ii,1},100);
-			pvalue(:,2) = runPermutationTest(stnMeans{ii,2},stanceTcourse{ii,2},...
-																			swingTcourse{ii,2},100);
+			pvalue(:,1) = runPermutationTest(stnMeans{ii,1},...
+					stanceTcourse{ii,1},swingTcourse{ii,1},100);
+			pvalue(:,2) = runPermutationTest(stnMeans{ii,2},...
+					stanceTcourse{ii,2},swingTcourse{ii,2},100);
 
 			
 			% need multiple comparison correction Bonferroni or FDR
@@ -407,6 +411,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			subplot(nSubjects,4,4*(ii-1)+2,'NextPlot','add')
 			plot(squeeze( mean(stnMeans{ii,1},2)),f)
+%			plot(stnMeans{ii,1},f)
 			plot([-3 3;-3 3],[0 0;90 90],'k--');	
 			plot(significanceMask(:,1),f,'ro','MarkerSize',2);
 			ylim([6 80]);
@@ -421,6 +426,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			subplot(nSubjects,4,4*(ii-1)+4,'NextPlot','add')
 			plot(squeeze(mean(stnMeans{ii,2},2)),f)
+%			plot(stnMeans{ii,2},f)
 			plot([-3 3;-3 3],[0 0;90 90],'k--');	
 			plot(significanceMask(:,2),f,'ro','MarkerSize',2),2;
 			ylim([6 80]);
@@ -473,4 +479,36 @@ function pvalue = runPermutationTest(dataObs,stance,swing,nPermutation)
 
 		end
 
+		pvalue = fdrCorrection(pvalue,0.05);
+
+end
+
+function pvalue = fdrCorrection(pvalue, alpha)
+%FDRCORRECTION Description
+%	PVALUE  = FDRCORRECTION() Long description
+%
+
+	tmpPvalue 	= sort(pvalue(:));
+	N 					= numel(pvalue);
+	FDR 				= alpha.*(1:N)./N;
+	thr 				= FDR(find(tmpPvalue <= FDR',1,'last'));
+	if isempty(thr)
+			pvalue = ones(84,1);
+	else
+		pvalue(pvalue >= thr) = 1;
+end
+%	K 					= N*alpha;
+%	ttmpPvalue	= sort(tmpPvalue(tmpPvalue < alpha));
+%
+%	if( numel(ttmpPvalue) > K)
+%			b	= ttmpPvalue(end-K:end);
+%
+%			loc = arrayfun(@(x) find( tmpPvalue == x ), unique(b),'uni',false);
+%			loc = cat(1,loc{:});
+%			tmpPvalue(loc) = 1;
+%			pvalue = reshape(tmpPvalue,size(pvalue));
+%	else
+%			pvalue = ones(size(pvalue));
+%	end
+%	
 end

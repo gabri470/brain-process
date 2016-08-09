@@ -67,7 +67,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	nFiles = numel(sInputs);
 
-	DATA_FOLDER='/media/lgabri/My Passport/';
+	DATA_FOLDER='/media/gabri/My Passport/';
 
   trialRejectionFile = fullfile(DATA_FOLDER,'trialRejection.csv');
   [patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
@@ -76,6 +76,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	[subjectNames, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
 	nSubjects = numel(unique([{sInputs.SubjectName}]));
 	stnResults = cell(nSubjects,2); 
+	stnRawResults = cell(nSubjects,2);
 	% the above var holds for each subjects the STN-/+ power for each stride
 	
 	currentSubject=[];
@@ -168,8 +169,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			% prepare plot order
 			nRowsInPlot		= nStrideLeft+nStrideRight+1;
-			plotOrder 		= mat2cell(reshape(1:nRowsInPlot*4,4,nRowsInPlot)',...
-																ones(nRowsInPlot,1),[2 2]);
+%			plotOrder 		= mat2cell(reshape(1:nRowsInPlot*4,4,nRowsInPlot)',...
+%																ones(nRowsInPlot,1),[2 2]);
 
 			% we have to correct the event adding the offset
 			% since they are referred to the 0 of the raw data 
@@ -270,9 +271,9 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					end
 
 					footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
-					footLabel				= footLabel{:}{:}; % this is the label of the central event 
+					footLabel				= footLabel{:}{:}; 
+					% this is the label of the central event 
 
-					plotOrderStride	= plotOrder(plotIdx,:);
 
 					if strcmp(footLabel,'L')
 							% left foot swing => central hc_L
@@ -281,12 +282,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							if strcmp(mostAffSide,'L')
 								% if STN- is L => this swing is relative to 
 								% STN+ => plot on right side of page
-								plotOrderStride	= plotOrderStride{2};
 								stnIdx					= 2;
 							else 
 								% if STN- is R => this swing is relative
 								% to STN- => plot on left side of page
-								plotOrderStride = plotOrderStride{1};
 								stnIdx					= 1;
 							end
 					else 
@@ -295,25 +294,24 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							if strcmp(mostAffSide,'L')
 								% if STN- is R => this swing is relative
 								% to STN- => plot on left side of page
-								plotOrderStride	= plotOrderStride{1};
 								stnIdx					= 1;
 							else 
 								% if STN- is L => this swing is relative to 
 								% STN+ => plot on right side of page
-								plotOrderStride = plotOrderStride{2};
 								stnIdx					= 2;
 							end
 					end
 
 					
 					% we save for each subject the time-warped ERSD normalized over***
-					stnRawResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
+					stnRawResults{subjectIdx,stnIdx} = ...
+							cat(1,stnRawResults{subjectIdx,stnIdx},...
 																								finalTF(controLatIdx,:,:));
 
 					if(~sProcess.options.normOnStride.Value)
 							finalTF = bsxfun(@rdivide,bsxfun(@minus,finalTF,...
-																		mean(finalTF(:,referenceStance(2):referenceStance(3),:),2)),...
-																		std(finalTF(:,referenceStance(2):referenceStance(3),:),[],2));
+									mean(finalTF(:,referenceStance(2):referenceStance(3),:),2)),...
+									std(finalTF(:,referenceStance(2):referenceStance(3),:),[],2));
 					end
 
 					stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
@@ -377,9 +375,9 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	for ii = 1:nSubjects
 
 			[pvalue(1,:,:), unCorrPvalue(1,:,:)] = runPermutationTest(stnMeans{ii,1},...
-																										stnRawResults{ii,1},100,referenceStance);
+																					stnRawResults{ii,1},100,referenceStance);
 			[pvalue(2,:,:), unCorrPvalue(2,:,:)] = runPermutationTest(stnMeans{ii,2},...
-																										stnRawResults{ii,2},100,referenceStance);
+																					stnRawResults{ii,2},100,referenceStance);
 
 
 			statSignificance = ones(size(pvalue)).*0.05;
@@ -389,7 +387,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			% this is the STN- 
 			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add');
 			h = imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
-			set(h,'AlphaData',squeeze(statSignificance(1,:,:))');
+%			set(h,'AlphaData',squeeze(statSignificance(1,:,:))');
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
 			axis xy;
 			set(gca,'XTickLabel',[]);
@@ -398,7 +396,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			
 			subplot(nSubjects,2,2*(ii-1)+2,'NextPlot','add');
 			h = imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
-			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
+%			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			axis xy;
