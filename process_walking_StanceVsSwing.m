@@ -77,11 +77,11 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	nFiles = numel(sInputs);
 
-  trialRejectionFile = fullfile('/media/gabri/My Passport','trialRejection.csv');
-  [patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
-																				'%s %*s %*s %*s%s%d%*s','delimiter',',');
+	INFO_DIR = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
+  trialRejectionFile = fullfile(INFO_DIR,'trialRejection.csv');
+  [patNames,trialStrings,stepIds] = textread(trialRejectionFile,'%s %*s %*s %*s%s%d%*s','delimiter',',');
 
-	sideFile = fullfile('/media/gabri/My Passport','patientSides.csv');
+	sideFile = fullfile(INFO_DIR,'patientSides.csv');
 	[subjectNames, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
 %	
 %	cynematicFile = fullfile('/home/lgabri/Desktop','walking','cynematics.csv');
@@ -118,13 +118,13 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 				currentSubject = sInputs(fileIdx).SubjectName;
 				subjectIdx = subjectIdx + 1;
 				subjectNameOrdered{subjectIdx} = sInputs(fileIdx).SubjectName;
+				fprintf('Analyzing %s\n',sInputs(fileIdx).SubjectName);
 			end
 
-			fprintf('Analyzing %s\n',sInputs(fileIdx).SubjectName);
 
 			fs = round(1/mean(diff( parentData.Time )));
 
-			% filter cardiac events from gait-related events
+			% filter cardiac and peakVelocity events from gait-related events
 			evGroupNames = {parentData.Events.label};
 			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
 
@@ -133,11 +133,15 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			% hc_L *tof_R hc_R *tof_L hc_L *tof_R hc_R *tof_L hc_L *tof_R
 			[strideStart,ord]		= sort([parentData.Events(gaitEventGroups).samples]);
 
+			evLabels = cell(1,sum(gaitEventGroups));
+			evIdx = find(gaitEventGroups);
+
 			% extract event names
-			for evIdx = find(gaitEventGroups)
+			for iidx = 1:numel(evIdx)
 			
-					evLabels{:,evIdx} = repmat({parentData.Events(evIdx).label},...
-							[1 numel(parentData.Events(evIdx).samples)]);		
+					
+					evLabels{iidx} = repmat({parentData.Events(evIdx(iidx)).label},...
+							[1 numel(parentData.Events(evIdx(iidx)).samples)]);		
 
 			end
 
@@ -159,11 +163,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			% stride mask each stride is composed by two steps
 			strideIndexes = [1:nStrides;2:nStrides+1]';
 			strideRej 		= find(sum(ismember(strideIndexes,stepRej),2));
-
-			% prepare plot order
-			nRowsInPlot		= nStrideLeft+nStrideRight+1;
-			plotOrder 		= mat2cell(reshape(1:nRowsInPlot*4,4,nRowsInPlot)',...
-																		ones(nRowsInPlot,1),[2 2]);
 
 			% we have to correct the event adding the offset
 			% since they are referred to the 0 of the raw data 
@@ -191,35 +190,34 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							continue;
 					end
 
-					footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
-					footLabel				= footLabel{:}{:}; % this is the label of the central hc 
+					try
+							
+							footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
+							footLabel				= footLabel{:}{:}; % this is the label of the central hc 
+					catch 
+							evNames
+							strideIdx
+					end
 
-%					plotOrderStride	= plotOrder(plotIdx,:);
 
 					% we need to switch foot Label since a left foot stride
 					% will have a hcR event as central (t0) event
 					% stnIdx are ordered as STN- first and STN+ next
 					if strcmp(footLabel,'L')
 							% right foot stride
-							footLabel 	 = 'R';
 							controLatIdx = 2;
 							if strcmp(mostAffSide,'L')
-%								plotOrderStride	= plotOrderStride{1};
 								stnIdx					= 1;
 							else 
-%								plotOrderStride = plotOrderStride{2};
 								stnIdx					= 2;
 							end
 					else 
 
 							% left foot stride
-							footLabel 	 = 'L';
 							controLatIdx = 1;
 							if strcmp(mostAffSide,'L')
-%								plotOrderStride	= plotOrderStride{2};
 								stnIdx					= 2;
 							else 
-%								plotOrderStride = plotOrderStride{1};
 								stnIdx					= 1;
 							end
 					end
@@ -253,8 +251,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							finalRaw(2,:)	 = mixingMatrix * strideRaw(:,2);
 
 							zLimit 		= [-2 2];
-							tEvAxis 	= repmat(referenceTimeVector(...
-																	referenceStance([2 3 4])),2, 1);
 
 							% tf_* -> hc_*
 							stanceWnd	= referenceStance(2):referenceStance(3);
@@ -272,7 +268,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							swingWnd	= originalVector(5):originalVector(6);
 
 							tAxis			= (-399:400)/fs;
-							tEvAxis 	= repmat(originalVector([3 4 5])./400,2, 1);
 					end
 					% here depending on the options chosen we might 
 					% end up having a time-warped data with fixed stride lengths
@@ -336,32 +331,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 										cat(1,stnResults{subjectIdx,stnIdx},...
 										squeeze(mean(finalTFZScored(controLatIdx,:,:),2))');
 					end
-%
-%					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
-%					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
-%					
-%					if sProcess.options.saveOutput.Value
-%							% save each stance in separate file
-%							% get the output study
-%							iStudy 						= sInputs(fileIdx).iStudy;
-%							DataMat 					= walkingStruct;
-%							DataMat.Freqs			= f;
-%							DataMat.Time			= time;
-%							DataMat.TF        = finalTF;
-%							DataMat.DataType  = 'data';
-%							DataMat.Comment		= sprintf('Stride %s (#%d)',footLabel,plotIdx);
-%										
-%							% Create a default output filename 
-%							OutputFiles{fileIdx} = bst_process('GetNewFilename', ...
-%									fileparts(sInputs(fileIdx).FileName), 'timefreq');
-%
-%							% Save on disk
-%							save(OutputFiles{fileIdx}, '-struct', 'DataMat');
-%
-%							% Register in database
-%							db_add_data(iStudy, OutputFiles{fileIdx}, DataMat);
-%
-%					end
+
 					plotIdx = plotIdx + 1;
 					clear finalTF;
 
@@ -378,15 +348,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	% We first average each element of stnResults across time in order to have 
 	% a frequency modulation
 	stnMeans	 = cellfun(@mean,stnResults,'UniformOutput',false);
-	stanceTAvg = cellfun(@mean,stanceTcourse,...
-									repmat({2},size(stanceTcourse)),'UniformOutput',false);
-	swingTAvg = cellfun(@mean,swingTcourse,...
-									repmat({2},size(swingTcourse)),'UniformOutput',false);
 
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
 			'paperunits','normalized','paperorientation','portrait','Visible','on');
 	
-	folder = 'original';
 	pvalue = zeros(numel(f),2);
 
 	for ii = 1:nSubjects
@@ -411,7 +376,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			subplot(nSubjects,4,4*(ii-1)+2,'NextPlot','add')
 			plot(squeeze( mean(stnMeans{ii,1},2)),f)
-%			plot(stnMeans{ii,1},f)
 			plot([-3 3;-3 3],[0 0;90 90],'k--');	
 			plot(significanceMask(:,1),f,'ro','MarkerSize',2);
 			ylim([6 80]);
@@ -426,7 +390,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			subplot(nSubjects,4,4*(ii-1)+4,'NextPlot','add')
 			plot(squeeze(mean(stnMeans{ii,2},2)),f)
-%			plot(stnMeans{ii,2},f)
 			plot([-3 3;-3 3],[0 0;90 90],'k--');	
 			plot(significanceMask(:,2),f,'ro','MarkerSize',2),2;
 			ylim([6 80]);
@@ -436,10 +399,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
 	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
 
-%			fname = fullfile('/home','lgabri','Desktop','walking',folder,'wavelet',...
-%					'avgZScoreStancevSwing.ps');
-%
-%			print(f2,'-dpsc2',fname);
+	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+			'avgZScoreStancevSwing.ps');
+
+	print(f2,'-dpsc2',fname);
 		
 end % function
 
@@ -479,7 +442,7 @@ function pvalue = runPermutationTest(dataObs,stance,swing,nPermutation)
 
 		end
 
-		pvalue = fdrCorrection(pvalue,0.05);
+%		pvalue = fdrCorrection(pvalue,0.05);
 
 end
 
@@ -497,18 +460,5 @@ function pvalue = fdrCorrection(pvalue, alpha)
 	else
 		pvalue(pvalue >= thr) = 1;
 end
-%	K 					= N*alpha;
-%	ttmpPvalue	= sort(tmpPvalue(tmpPvalue < alpha));
-%
-%	if( numel(ttmpPvalue) > K)
-%			b	= ttmpPvalue(end-K:end);
-%
-%			loc = arrayfun(@(x) find( tmpPvalue == x ), unique(b),'uni',false);
-%			loc = cat(1,loc{:});
-%			tmpPvalue(loc) = 1;
-%			pvalue = reshape(tmpPvalue,size(pvalue));
-%	else
-%			pvalue = ones(size(pvalue));
-%	end
-%	
+
 end

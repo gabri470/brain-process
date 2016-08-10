@@ -76,11 +76,12 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	nFiles = numel(sInputs);
 
-  trialRejectionFile = fullfile('/home/lgabri/Desktop','walking','trialRejection.csv');
+	DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
+  trialRejectionFile = fullfile(DATA_FOLDER,'trialRejection.csv');
   [patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
 																				'%s %*s %*s %*s%s%d%*s','delimiter',',');
 
-	sideFile = fullfile('/home/lgabri/Desktop','walking','patientSides.csv');
+	sideFile = fullfile(DATA_FOLDER,'patientSides.csv');
 	[subjectNames, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
 %	
 %	cynematicFile = fullfile('/home/lgabri/Desktop','walking','cynematics.csv');
@@ -120,7 +121,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			% filter cardiac events from gait-related events
 			evGroupNames = {parentData.Events.label};
-			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'[heel|toe]'));
+			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
 
 			% concat all heel contact events in order to have
 			% a vector of latencies of this form: e.g.
@@ -128,14 +129,15 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			[strideStart,ord]		= sort([parentData.Events(gaitEventGroups).samples]);
 
 			% extract event names
+			evLabels = cell(1,sum(gaitEventGroups));
+			evLabelsIdx = 1;
 			for evIdx = find(gaitEventGroups)
 			
-					evLabels{:,evIdx} = repmat({parentData.Events(evIdx).label},...
+					evLabels{evLabelsIdx} = repmat({parentData.Events(evIdx).label},...
 							[1 numel(parentData.Events(evIdx).samples)]);		
+					evLabelsIdx = evLabelsIdx + 1;
 
-			end
-
-			% re-order event names accordingly
+			end			% re-order event names accordingly
 			evNames 	= [evLabels{:}];
 			evNames 	= evNames(ord);
 	
@@ -214,52 +216,45 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							finalRaw(1,:)	 = mixingMatrix * strideRaw(:,1);
 							finalRaw(2,:)	 = mixingMatrix * strideRaw(:,2);
 
-							zLimit 		= [-2 2];
-							tEvAxis 	= repmat(referenceTimeVector(referenceStance([2 3 4])),2, 1);
-
+%							zLimit 		= [-2 2];
+%							tEvAxis 	= repmat(referenceTimeVector(referenceStance([2 3 4])),2, 1);
+%
 							% tf_* -> hc_*
 							stanceWnd	= referenceStance(2):referenceStance(3);
 							% tf_* -> hc_*
 							swingWnd	= referenceStance(4):referenceStance(5);
-							tAxis			= referenceTimeVector;
+%							tAxis			= referenceTimeVector;
 
 					else
 							finalTF 	= dataTF.*1e12;
 							finalRaw	= strideRaw';
-							zLimit 		= [min(finalTF(:)) max(finalTF(:))];
-							tAxis			= (-399:400)/fs;
-							tEvAxis 	= repmat(originalVector([3 4 5])./400,2, 1);
+%							zLimit 		= [min(finalTF(:)) max(finalTF(:))];
+%							tAxis			= (-399:400)/fs;
+%							tEvAxis 	= repmat(originalVector([3 4 5])./400,2, 1);
 					end
 
 					footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
 					footLabel				= footLabel{:}{:}; % this is the label of the central hc event
 
-					plotOrderStride	= plotOrder(plotIdx,:);
 
 					% we need to switch foot Label since a left foot stride
 					% will have a hcR event as central (t0) event
 					% stnIdx are ordered as STN- first and STN+ next
 					if strcmp(footLabel,'L')
 							% right foot stride
-							footLabel 	 = 'R';
 							controLatIdx = 2;
 							if strcmp(mostAffSide,'L')
-								plotOrderStride	= plotOrderStride{1};
 								stnIdx					= 1;
 							else 
-								plotOrderStride = plotOrderStride{2};
 								stnIdx					= 2;
 							end
 					else 
 
 							% left foot stride
-							footLabel 	 = 'L';
 							controLatIdx = 1;
 							if strcmp(mostAffSide,'L')
-								plotOrderStride	= plotOrderStride{2};
 								stnIdx					= 2;
 							else 
-								plotOrderStride = plotOrderStride{1};
 								stnIdx					=1;
 							end
 					end
@@ -364,9 +359,9 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],'paperunits','normalized',...
 										'paperorientation','portrait','Visible','on');
 	
-	folder = 'original';
 
 	for ii = 1:nSubjects
+			pvalue = ones(numel(f),2);
 
 			for freqPoint = 1:numel(f)
 				% for each STN-/+ and for each frequency we compute the wilcoxon ranksum test
@@ -377,8 +372,9 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 																			swingTAvg{ii,2}(:,freqPoint));
 
 			end
+
 			significanceBar = nan(numel(f),2);
-			significanceBar(pvalue < 0.05) = 4;
+			significanceBar(pvalue < 0.05) = 1e-18;
 
 			% this is the STN- 
 			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add')
@@ -388,7 +384,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 						f,swingStrTAvg{ii,1}+swingStrTStd{ii,1},'g--',...
 						f,swingStrTAvg{ii,1}-swingStrTStd{ii,1},'g--');
 
-			plot(f,significanceBar(:,1),'rx','MarkerSize',4);
+%			plot(f,significanceBar(:,1),'rx','MarkerSize',4);
 			xlim([min(f) max(f)]);
 			xlabel('Frequency (Hz)');
 
@@ -400,17 +396,15 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 						f,swingStrTAvg{ii,2}+swingStrTStd{ii,2},'g--',...
 						f,swingStrTAvg{ii,2}-swingStrTStd{ii,2},'g--');
 			xlim([min(f) max(f)]);
-			plot(f,significanceBar(:,2),'rx','MarkerSize',4);
+%			plot(f,significanceBar(:,2),'rx','MarkerSize',4);
 			xlabel('Frequency (Hz)');
 
 	end
 
 	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
 	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
-
-	fname = fullfile('/home','lgabri','Desktop','walking',folder,'wavelet',...
+	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
 			'powerVariability.ps');
-
 	print(f2,'-dpsc2',fname);
 		
 end % function

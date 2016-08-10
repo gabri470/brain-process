@@ -67,14 +67,14 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	nFiles = numel(sInputs);
 
-	DATA_FOLDER='/media/gabri/My Passport/';
+	DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
 
   trialRejectionFile = fullfile(DATA_FOLDER,'trialRejection.csv');
   [patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
 																				'%s %*s %*s %*s%s%d%*s','delimiter',',');
 	sideFile = fullfile(DATA_FOLDER,'patientSides.csv');
 	[subjectNames, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
-	nSubjects = numel(unique([{sInputs.SubjectName}]));
+	nSubjects = numel(unique({sInputs.SubjectName}));
 	stnResults = cell(nSubjects,2); 
 	stnRawResults = cell(nSubjects,2);
 	% the above var holds for each subjects the STN-/+ power for each stride
@@ -167,10 +167,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			strideIndexes = [1:nStrides;2:nStrides+1]';
 			strideRej 		= find(sum(ismember(strideIndexes,stepRej),2));
 
-			% prepare plot order
-			nRowsInPlot		= nStrideLeft+nStrideRight+1;
-%			plotOrder 		= mat2cell(reshape(1:nRowsInPlot*4,4,nRowsInPlot)',...
-%																ones(nRowsInPlot,1),[2 2]);
 
 			% we have to correct the event adding the offset
 			% since they are referred to the 0 of the raw data 
@@ -180,7 +176,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			% we create the normalized stride time vector
 			referenceTimeVector = -1:1/fs:(1-1/fs);
 			doubleSuppDur 			= floor(0.19*fs);
-			singleSuppDur 			= floor(0.4*fs);
+%			singleSuppDur 			= floor(0.4*fs);
 			acPhaseDur					= floor((.4*2/3)*fs);
 			decPhaseDur					= floor((.4/3)*fs);
 
@@ -320,29 +316,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
 					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
-					
-					if sProcess.options.saveOutput.Value
-							% save each stance in separate file
-							% get the output study
-							iStudy 						= sInputs(fileIdx).iStudy;
-							DataMat 					= walkingStruct;
-							DataMat.Freqs			= f;
-							DataMat.Time			= time;
-							DataMat.TF        = finalTF;
-							DataMat.DataType  = 'data';
-							DataMat.Comment		= sprintf('Stride %s (#%d)',footLabel,plotIdx);
-										
-							% Create a default output filename 
-							OutputFiles{fileIdx} = bst_process('GetNewFilename', ...
-									fileparts(sInputs(fileIdx).FileName), 'timefreq');
 
-							% Save on disk
-							save(OutputFiles{fileIdx}, '-struct', 'DataMat');
-
-							% Register in database
-							db_add_data(iStudy, OutputFiles{fileIdx}, DataMat);
-
-					end
 					plotIdx = plotIdx + 1;
 					clear finalTF;
 
@@ -369,8 +343,75 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							 'paperunits','normalized','paperorientation',...
 								'portrait','Visible','on');
 
+	betaMask = f >= 6 & f <= 13;
+	gammaMask  = f > 13 & f < 80;
+	for ii = 1:nSubjects
 
-	folder = 'original';
+			stnMostAff = squeeze(stnMeans{ii,1});
+			stnLessAff = squeeze(stnMeans{ii,2});
+
+			subplot(nSubjects*2,2,4*(ii-1)+1,'NextPlot','add')
+			imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
+			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+			axis xy;
+			set(gca,'XTickLabel',[]);
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+			ylim([6 80]);
+
+			subplot(nSubjects*2,2,4*(ii-1)+2,'NextPlot','add')
+		  imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
+			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+			axis xy;
+			set(gca,'XTickLabel',[]);
+			ylim([6 80]);
+
+			% this is the STN- 
+%			subplot(nSubjects*3,2,6*(ii-1)+3,'NextPlot','add');
+%			h = imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
+%			set(h,'AlphaData',squeeze(statSignificance(1,:,:))');
+%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+%			axis xy;
+%			set(gca,'XTickLabel',[]);
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%			ylim([6 80]);
+%			
+%			subplot(nSubjects*3,2,6*(ii-1)+4,'NextPlot','add');
+%			h= imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
+%			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
+%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%			axis xy;
+%			set(gca,'XTickLabel',[]);
+%			ylim([6 80]);
+
+			subplot(nSubjects*2,2,4*(ii-1)+3,'NextPlot','add')
+			plot(tAxis,mean(stnMostAff(:,betaMask),2),'r');
+			plot(tAxis,mean(stnMostAff(:,gammaMask),2),'b');
+			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+			ylim([-3 3]);
+
+			subplot(nSubjects*2,2,4*(ii-1)+4,'NextPlot','add')
+			plot(tAxis,mean(stnLessAff(:,betaMask),2),'r');
+			plot(tAxis,mean(stnLessAff(:,gammaMask),2),'b');
+			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+			ylim([-3 3]);
+
+
+
+	end
+%	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
+%	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
+
+	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+			'avgZScoreAcVsDCPhases.ps');
+
+	print(f2,'-dpsc',fname);
+
+
+
 
 	for ii = 1:nSubjects
 
@@ -380,65 +421,53 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 																					stnRawResults{ii,2},100,referenceStance);
 
 
-			statSignificance = ones(size(pvalue)).*0.05;
+			statSignificance = ones(size(pvalue)).*0.3;
 			statSignificance(unCorrPvalue < 0.05) = 0.6;
 			statSignificance(pvalue < 0.05) = 1;
 
-			% this is the STN- 
-			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add');
+
+			f2 = figure(2);
+			hold on
 			h = imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
-%			set(h,'AlphaData',squeeze(statSignificance(1,:,:))');
+			box off
+			axis off
+
+			set(h,'AlphaData',squeeze(statSignificance(1,:,:))')
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			axis xy;
 			set(gca,'XTickLabel',[]);
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			ylim([6 80]);
-			
-			subplot(nSubjects,2,2*(ii-1)+2,'NextPlot','add');
+
+			fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+					strcat(subjectNameOrdered{ii},'_stn-_stat.png'));
+
+			print(f2,'-dpng','-r300',fname);
+
+			f3 = figure(3);
+			hold on
 			h = imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
-%			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
+
+			box off
+			axis off
+			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			axis xy;
 			set(gca,'XTickLabel',[]);
 			ylim([6 80]);
 
-	end
-	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
-	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
+			fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+					strcat(subjectNameOrdered{ii},'_stn+_stat.png'));
 
-	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
-							 'paperunits','normalized','paperorientation',...
-								'portrait','Visible','on');
+			print(f3,'-dpng','-r300',fname);
 
-	betaMask = f >= 6 & f <= 13;
-	gammaMask  = f > 13 & f < 80;
-	for ii = 1:nSubjects
+			clearvars statSignificance pvalue unCorrPvalue
+			close(f2);
+			close(f3);
 
-			stnMostAff = squeeze(stnMeans{ii,1});
-			stnLessAff = squeeze(stnMeans{ii,2});
-
-			% this is the STN- 
-			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add')
-			plot(tAxis,mean(stnMostAff(:,betaMask),2),'r');
-			plot(tAxis,mean(stnMostAff(:,gammaMask),2),'b');
-			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-						
-			subplot(nSubjects,2,2*(ii-1)+2,'NextPlot','add')
-			plot(tAxis,mean(stnLessAff(:,betaMask),2),'r');
-			plot(tAxis,mean(stnLessAff(:,gammaMask),2),'b');
-			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 
 	end
-	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
-	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
-%	fname = fullfile('/home','lgabri','Desktop',...
-%										'walking',folder,'wavelet','avgERSD.ps');
-%
-%	print(f2,'-dpsc2',fname);
-
 end % function
 
 function [pvalue, unCorrpvalue] = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStance)

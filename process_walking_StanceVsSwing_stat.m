@@ -76,11 +76,11 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	nFiles = numel(sInputs);
 
-  trialRejectionFile = fullfile('/home/lgabri/Desktop','walking','trialRejection.csv');
+  trialRejectionFile = fullfile('/media/gabri/My Passport','trialRejection.csv');
   [patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
 																				'%s %*s %*s %*s%s%d%*s','delimiter',',');
 
-	sideFile = fullfile('/home/lgabri/Desktop','walking','patientSides.csv');
+	sideFile = fullfile('/media/gabri/My Passport','patientSides.csv');
 	[subjectNames, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
 %	
 %	cynematicFile = fullfile('/home/lgabri/Desktop','walking','cynematics.csv');
@@ -358,10 +358,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	end
 			annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
 			annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
-
-			fname = fullfile('/home','lgabri','Desktop','walking',folder,'wavelet',...
-					'avgZScoreStancevSwing.ps');
-
-			print(f2,'-dpsc2',fname);
+%
+%			fname = fullfile('/home','lgabri','Desktop','walking',folder,'wavelet',...
+%					'avgZScoreStancevSwing.ps');
+%
+%			print(f2,'-dpsc2',fname);
 		
 end % function
