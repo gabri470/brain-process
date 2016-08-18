@@ -400,16 +400,16 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
 
 	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
-			'avgZScoreStancevSwing.ps');
+			'avgZScoreStancevSwing_Corr.ps');
 
 	print(f2,'-dpsc2',fname);
 		
 end % function
 
 
-function pvalue = runPermutationTest(dataObs,stance,swing,nPermutation)
-%RUNPERMUTATIONTEST Description
-%	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
+function [corrPvalue,unCorrPvalue] = runPermutationTest(dataObs,stance,swing,nPermutation)
+%RUNPERMUTATIONTEST 
+%	[CORRECTEDPVALUES,UNCORRECTEDPVALUES] = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) 
 %
 		pvalue  = zeros(84,1);
 		nStance = size(stance,1);
@@ -441,14 +441,15 @@ function pvalue = runPermutationTest(dataObs,stance,swing,nPermutation)
 			pvalue = pvalue + double(dataPerm > dataObs)./nPermutation;
 
 		end
-
-%		pvalue = fdrCorrection(pvalue,0.05);
+		% output also uncorrected pvalues
+		unCorrPvalue = pvalue;
+		corrPvalue = fdrCorrection(pvalue,0.05);
 
 end
 
 function pvalue = fdrCorrection(pvalue, alpha)
-%FDRCORRECTION Description
-%	PVALUE  = FDRCORRECTION() Long description
+%FDRCORRECTION 
+%	PVALUE  = FDRCORRECTION(pvalue, alpha) 
 %
 
 	tmpPvalue 	= sort(pvalue(:));

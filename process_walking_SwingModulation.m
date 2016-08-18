@@ -1,4 +1,4 @@
-function varargout = process_walking_SingleVsDouble( varargin )
+function varargout = process_walking_SwingModulation( varargin )
 % PROCESS_EXAMPLE_CUSTOMAVG: Example file that reads all the data files in input, and saves the average.
 
 % @=============================================================================
@@ -19,7 +19,7 @@ function varargout = process_walking_SingleVsDouble( varargin )
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-
+varargout = {};
 macro_methodcall;
 end
 
@@ -27,30 +27,32 @@ end
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
     % Description the process
-    sProcess.Comment     = 'Single Vs Double Supp';
+    sProcess.Comment     = 'Swing Modulation';
     sProcess.FileTag     = '__';
     sProcess.Category    = 'Custom';
     sProcess.SubGroup    = 'Walking';
     sProcess.Index       = 801;
+
     % Definition of the input accepted by this process
     sProcess.InputTypes  = {'timefreq'};
     sProcess.OutputTypes = {'timefreq'};
     sProcess.nInputs     = 1;
     sProcess.nMinFiles   = 1;
+
     % Definition of the options
 		% Sensor types
 		sProcess.options.sensortypes.Comment = 'Sensor types or names: ';
 		sProcess.options.sensortypes.Type    = 'text';
 		sProcess.options.sensortypes.Value   = 'SEEG';
-		sProcess.options.doWarping.Comment = 'time warping ';
-		sProcess.options.doWarping.Type    = 'checkbox';
-		sProcess.options.doWarping.Value   = true;
-		sProcess.options.saveOutput.Comment = 'Save output to brainstormDB';
-		sProcess.options.saveOutput.Type    = 'checkbox';
-		sProcess.options.saveOutput.Value   = false;
-		sProcess.options.normOnStride.Comment = 'Normalize on Stride';
-		sProcess.options.normOnStride.Type = 'checkbox';
-		sProcess.options.normOnStride.Value= false';
+		sProcess.options.doWarping.Comment   = 'time warping ';
+		sProcess.options.doWarping.Type      = 'checkbox';
+		sProcess.options.doWarping.Value     = true;
+		sProcess.options.saveOutput.Comment  = 'Save output to brainstormDB';
+		sProcess.options.saveOutput.Type     = 'checkbox';
+		sProcess.options.saveOutput.Value    = false;
+		sProcess.options.normOnStride.Comment= 'Normalize on Stride';
+		sProcess.options.normOnStride.Type   = 'checkbox';
+		sProcess.options.normOnStride.Value  = false';
 	
 
 end
@@ -120,34 +122,41 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			% compute sampling frequency
 			fs = round(1/mean(diff( parentData.Time )));
 
-			% filter cardiac and peakVelocity events from gait-related events
+			% filter cardiac events from gait-related events
 			evGroupNames = {parentData.Events.label};
-			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
+			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe|peakVeloc)'));
 
 			% concat all heel contact events in order to have
 			% a vector of latencies of this form: e.g.
 			% hc_L *tof_R hc_R *tof_L hc_L *tof_R hc_R *tof_L hc_L *tof_R
 			[strideStart,ord]		= sort([parentData.Events(gaitEventGroups).samples]);
 
-			evLabels = cell(1,sum(gaitEventGroups));
-			evIdx = find(gaitEventGroups);
-
 			% extract event names
-			for iidx = 1:numel(evIdx)
+			evLabels = cell(1,sum(gaitEventGroups));
+			evLabelsIdx = 1;
+			for evIdx = find(gaitEventGroups)
 			
-					
-					evLabels{iidx} = repmat({parentData.Events(evIdx(iidx)).label},...
-							[1 numel(parentData.Events(evIdx(iidx)).samples)]);		
+					evLabels{evLabelsIdx} = repmat({parentData.Events(evIdx).label},...
+							[1 numel(parentData.Events(evIdx).samples)]);		
+					evLabelsIdx = evLabelsIdx + 1;
 
 			end
 
 			% re-order event names accordingly
-			evNames = [evLabels{:}];
-			evNames = evNames(ord);
-	
+			evNames 	= [evLabels{:}];
+			evNames 	= evNames(ord);
+
+			% we filter those events that 
+			peakVelocIdx 	= find(~cellfun(@isempty,regexp(evNames,'peak')));
+			peakVelocMask = peakVelocIdx - 2 > 0 & peakVelocIdx +2 <= numel(evNames);
+
 			% count how many strides we have recorded
-			nStrideLeft = sum(strcmp(evNames,'heelcontact_L'))-1; 
-			nStrideRight= sum(strcmp(evNames,'heelcontact_R'))-1; 
+%			nStrideLeft = sum(strcmp(evNames,'heelcontact_L'))-1; 
+%			nStrideRight= sum(strcmp(evNames,'heelcontact_R'))-1; 
+
+			nStrideLeft = sum(strcmp(evNames,'peakVeloc_L'))-1; 
+			nStrideRight= sum(strcmp(evNames,'peakVeloc_R'))-1; 
+						
 			nStrides 		= nStrideLeft + nStrideRight;
 
 			% prepare event mask to reject artefactual or incomplete step
@@ -169,21 +178,29 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			% we create the normalized stride time vector
 			referenceTimeVector = -1:1/fs:(1-1/fs);
 			doubleSuppDur 			= floor(0.19*fs);
-			singleSuppDur 			= floor(0.4*fs);
+%			singleSuppDur 			= floor(0.4*fs);
+			acPhaseDur					= floor((.4*2/3)*fs);
+			decPhaseDur					= floor((.4/3)*fs);
 
-			referenceStance 		= 400 + [ -doubleSuppDur-singleSuppDur ...
-																				-singleSuppDur 0 +doubleSuppDur ...
-																		+doubleSuppDur+singleSuppDur ];
+
+			referenceStance 		= 400 + [ -doubleSuppDur-acPhaseDur...
+																				-acPhaseDur 0 +decPhaseDur ...
+																		+doubleSuppDur+decPhaseDur ];
+
+%			referenceStance 		= 400 + [ -doubleSuppDur-singleSuppDur ...
+%																				-singleSuppDur 0 +doubleSuppDur ...
+%																		+doubleSuppDur+singleSuppDur ];
 
 			referenceVector			= [1 referenceStance 800];
 			plotIdx = 1;
 
-			for strideIdx = 3:2:nStrides*2+2
-
+			for strideIdx = peakVelocIdx(peakVelocMask) 
 
 					% check that data are order correctly for each stride
+
 					matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
-									'heelcontact_[R|L]','toeoff_[L|R]','heelcontact_[R|L]'};
+																			'peakVeloc_[R|L]',...
+															'heelcontact_[R|L]','toeoff_[L|R]'};
 					orderCheck = sum(cellfun(@isempty,cellfun(@regexp,evNames((-2:2)+strideIdx),...
 																									matchingString,'uni',false)));
 
@@ -351,6 +368,24 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			set(gca,'XTickLabel',[]);
 			ylim([6 80]);
 
+			% this is the STN- 
+%			subplot(nSubjects*3,2,6*(ii-1)+3,'NextPlot','add');
+%			h = imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
+%			set(h,'AlphaData',squeeze(statSignificance(1,:,:))');
+%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+%			axis xy;
+%			set(gca,'XTickLabel',[]);
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%			ylim([6 80]);
+%			
+%			subplot(nSubjects*3,2,6*(ii-1)+4,'NextPlot','add');
+%			h= imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
+%			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
+%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%			axis xy;
+%			set(gca,'XTickLabel',[]);
+%			ylim([6 80]);
 
 			subplot(nSubjects*2,2,4*(ii-1)+3,'NextPlot','add')
 			plot(tAxis,mean(stnMostAff(:,betaMask),2),'r');
@@ -369,11 +404,16 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 
 	end
+%	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
+%	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
 
 	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
-			'avgZScoreSinVsDouble.ps');
+			'avgZScoreAcVsDCPhases.ps');
 
 	print(f2,'-dpsc',fname);
+
+
+
 
 	for ii = 1:nSubjects
 
@@ -382,9 +422,11 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			[pvalue(2,:,:), unCorrPvalue(2,:,:)] = runPermutationTest(stnMeans{ii,2},...
 																					stnRawResults{ii,2},100,referenceStance);
 
+
 			statSignificance = ones(size(pvalue)).*0.3;
 			statSignificance(unCorrPvalue < 0.05) = 0.6;
 			statSignificance(pvalue < 0.05) = 1;
+
 
 			f2 = figure(2);
 			hold on
@@ -400,7 +442,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			ylim([6 80]);
 
 			fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
-					strcat(subjectNameOrdered{ii},'_stn-_sinVsDouble.png'));
+					strcat(subjectNameOrdered{ii},'_stn-_stat.png'));
 
 			print(f2,'-dpng','-r300',fname);
 
@@ -418,7 +460,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			ylim([6 80]);
 
 			fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
-					strcat(subjectNameOrdered{ii},'_stn+_sinVsDouble.png'));
+					strcat(subjectNameOrdered{ii},'_stn+_stat.png'));
 
 			print(f3,'-dpng','-r300',fname);
 
@@ -484,5 +526,18 @@ function pvalue = fdrCorrection(pvalue, alpha)
 	FDR 				= alpha.*(1:N)./N;
 	thr 				= FDR(find(tmpPvalue <= FDR',1,'last'));
 	pvalue(pvalue >= thr) = 1;
-
+%	K 					= N*alpha;
+%	ttmpPvalue	= sort(tmpPvalue(tmpPvalue < alpha));
+%
+%	if( numel(ttmpPvalue) > K)
+%			b	= ttmpPvalue(end-K:end);
+%
+%			loc = arrayfun(@(x) find( tmpPvalue == x ), unique(b),'uni',false);
+%			loc = cat(1,loc{:});
+%			tmpPvalue(loc) = 1;
+%			pvalue = reshape(tmpPvalue,size(pvalue));
+%	else
+%			pvalue = ones(size(pvalue));
+%	end
+%	
 end

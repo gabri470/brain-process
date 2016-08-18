@@ -385,7 +385,9 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 						f,swingStrTAvg{ii,1}-swingStrTStd{ii,1},'g--');
 
 %			plot(f,significanceBar(:,1),'rx','MarkerSize',4);
-			xlim([min(f) max(f)]);
+			yLimValues = get(gca,'YLim');
+			ylim([0 yLimValues(2)]);
+			xlim([min(f) 40]);
 			xlabel('Frequency (Hz)');
 
 
@@ -395,7 +397,11 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 						f,stanceStrTAvg{ii,2}-stanceStrTStd{ii,2},'b--',...
 						f,swingStrTAvg{ii,2}+swingStrTStd{ii,2},'g--',...
 						f,swingStrTAvg{ii,2}-swingStrTStd{ii,2},'g--');
-			xlim([min(f) max(f)]);
+
+			yLimValues = get(gca,'YLim');
+			ylim([0 yLimValues(2)]);
+			
+			xlim([min(f) 40]);
 %			plot(f,significanceBar(:,2),'rx','MarkerSize',4);
 			xlabel('Frequency (Hz)');
 

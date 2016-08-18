@@ -1,4 +1,4 @@
-function varargout = process_walking_timeWarp2( varargin )
+function varargout = process_walking_CynematicCorr( varargin )
 % PROCESS_EXAMPLE_CUSTOMAVG: Example file that reads all the data files in input, and saves the average.
 
 % @=============================================================================
@@ -76,14 +76,15 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	nFiles = numel(sInputs);
 
-  trialRejectionFile = fullfile('/home/lgabri/Desktop','walking','trialRejection.csv');
+	DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
+  trialRejectionFile = fullfile(DATA_FOLDER,'trialRejection.csv');
   [patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
 																				'%s %*s %*s %*s%s%d%*s','delimiter',',');
 
-	sideFile = fullfile('/home/lgabri/Desktop','walking','patientSides.csv');
+	sideFile = fullfile(DATA_FOLDER,'patientSides.csv');
 	[subjectNames, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
 	
-	cynematicFile = fullfile('/home/lgabri/Desktop','walking','cynematicFile.csv');
+	cynematicFile = fullfile(DATA_FOLDER,'cynematicFile.csv');
 	[subName, trials, stepIndices, sideStances, velocities, lenghts] = ...
 			textread(cynematicFile,'%s %s %d %s %f %f\n','delimiter',',','headerlines',1);
 
@@ -92,7 +93,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	velocities 			= mat2cell(velocities,subOffsets);
 	lenghts 				= mat2cell(lenghts,subOffsets);
 	stepIndices 		= mat2cell(stepIndices,subOffsets);
-
 
 	OutputFiles = {};
 
