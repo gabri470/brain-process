@@ -62,8 +62,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	mostAffSides = mostAffSides(ismember(nameSubjects,subjectNames));
 
-
-
 	% we need to find files that have to be processed and group 
 	% them for subjects and conditions
 	% First group all sInput.Comment together
@@ -90,9 +88,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			standingStruct = in_bst_timefreq(sInputs(standingFileIdx).FileName);
 
 			% we should cycle through walking trials
-			% extract the morlet coefficients 
-			% compute the min lenght
-			% do the statistics
+			% compute the min length in order to do 
+			% the statistics lately
 			for walkTrialIdx = 1:numel(walkingFileIdx)
 
 					walkingStruct = in_bst_timefreq(sInputs(walkingFileIdx(walkTrialIdx)).FileName);
@@ -113,116 +110,144 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 					% get the maximum duration from first heel contact 
 					% to the last heel contact 
-					walkingLength = max(eventSamples)-min(eventSamples);
-					standingLength = numel(standingStruct.Time);
+					walkingLength(walkTrialIdx) = max(eventSamples)-min(eventSamples);
 
-					% how many windows of walking length can 
-					% we extract from standing data 
-					% in order to make test for difference?
-					nWindows = floor(standingLength/walkingLength);
+			end % walking loop
 
-					% let's for a moment assume that the reshape works correctly
-					% we separate chucks of standing of walkingLength in order to 
-					% make periods with the same time lengths 
-					standData = reshape(standingStruct.TF(:,1:(nWindows*walkingLength),:),...
-																		[2,nWindows,walkingLength,90]);
+			% we then get the min windows
+		  walkingRefLength = min(walkingLength);
 
-					walkData = walkingStruct.TF;
+			standingLength = numel(standingStruct.Time);
 
-					% compute the PSD as mean over time of the morlet coefficients
-					% for stand which will result in a 2 x nWindows x 90 matrix
-					standPsd = squeeze(mean(standData,3));
-					% and walking that will result in a 2 x 90 points
-					walkPsd = squeeze( mean(walkData,2) );
+			% how many windows of walking length can 
+			% we extract from standing data 
+			% in order to make test for difference?
+			nWindows = floor(standingLength/walkingRefLength);
 
-					% we should normalize 'em all as metallica are singing now
-					standPsd = bsxfun(@rdivide,standPsd,sum(standPsd,3));
-					walkPsd = bsxfun(@rdivide,walkPsd,sum(walkPsd,2));
+			% we separate chucks of standing of walkingRefLength in order to 
+			% make periods with the same time lengths 
+			standData = reshape(standingStruct.TF(:,1:(nWindows*walkingRefLength),:),...
+																[2,nWindows,walkingRefLength,90]);
 
-					% then compute a relative change to test for the hypothesis
-					% that standing would have more power in beta band then walking
-					% since walking should be suppressing beta and gamma during strides
-					relChange(:,:,walkTrialIdx) = (walkPsd - squeeze(mean(standPsd,2)))./squeeze(mean(standPsd,2));
 
-					% sort rows (ie. channels) to match STN- / STN+ order
-					% that is fixed thorought the paper/analyses
-					if(strcmp(mostAffSides(subjIdx),'L'))
-							relChange = relChange([2 1],:,:);
-					end
+			walkData = nan(2,walkingRefLength,90,numel(walkingFileIdx));
 
-					% then separately for STN- and STN+
-					% compute the difference and do a permutation test
-					% we should of course correct for multiple comparisons
+			for walkIdx = 1:numel(walkingFileIdx)
+					walkingStruct = in_bst_timefreq(sInputs(walkingFileIdx(walkTrialIdx)).FileName);
+					parentStruct 	= bst_process('GetInputStruct',walkingStruct.DataFile);
+					parentData 		= in_bst(parentStruct.FileName);
+		
+					% filter cardiac and peakVelocity events from gait-related events
+					evGroupNames = {parentData.Events.label};
+					gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
 
-			end % walking trial loop
-%			mostAffSide = mostAffSides(subjIdx);
+					% concat all heel contact events in order to have
+					% a vector of latencies of this form: e.g.
+					% hc_L *tof_R hc_R *tof_L hc_L *tof_R hc_R *tof_L hc_L *tof_R
+					eventSamples = sort([parentData.Events(gaitEventGroups).samples]);
+
+					% we have to correct the event adding the offset
+					% since they are referred to the 0 of the raw data 
+					evOffset 			= round(walkingStruct.Time(1)*fs);
+					eventSamples  = eventSamples - evOffset;
+
+					% we then pack trails together in order to have a matrix 2 x walkingRefLength x f x trials
+					% that we will rotate to match the form 2 x windows x walkingRefLength x f as 
+					% standing condition data are represented in
+					walkData(:,:,:,walkIdx) = walkingStruct.TF(:,eventSamples(1)+(1:walkingRefLength),:);
+
+		  end % walking trial loop
+
+			% permute dim order to match 2 x #windows x length x f
+			walkData = permute(walkData,[1 4 2 3]);
+
+			% compute the PSD as mean over time of the morlet coefficients
+			% for stand which will result in a 2 x nWindows x 90 matrix
+			standPsd = squeeze(mean(standData,3));
+			% and walking that will result in a 2 x trials x 90 points
+			walkPsd = squeeze(mean(walkData,3));
+
+			% we should normalize 'em all as metallica are singing now
+			standPsd = bsxfun(@rdivide,standPsd,sum(standPsd,3));
+			walkPsd = bsxfun(@rdivide,walkPsd,sum(walkPsd,3));
+
+			% then compute a relative change to test for the hypothesis
+			% that standing would have more power in beta band then walking
+			% since walking should be suppressing beta and gamma during strides
+			relChange = (squeeze(mean(walkPsd,2)) - squeeze(mean(standPsd,2)))./squeeze(mean(standPsd,2));
+			
+			% then separately for STN- and STN+
+			% compute the difference and do a permutation test
+			% we should of course correct for multiple comparisons
+			pvalue(1,:) = runPermutationTest(relChange(1,:),walkPsd(1,:,:),standPsd(1,:,:),100,0.05);
+			pvalue(2,:) = runPermutationTest(relChange(2,:),walkPsd(2,:,:),standPsd(2,:,:),100,0.05);
+			
+			
+			% sort rows (ie. channels) to match STN- / STN+ order
+			% that is fixed thorought the paper/analyses
+			if(strcmp(mostAffSides(subjIdx),'L'))
+					relChange = relChange([2 1],:);
+			end
+
+			significanceMask = nan(2,90);
+			significanceMask(pvalue < 0.05) = 3;
 
 			subplot(nSubjects,4,4*(subjIdx-1)+1,'NextPlot','add')
-			plot(1:90,squeeze(mean(relChange(1,:,:),3)))
+			plot(1:90,relChange(1,:))
+			plot(1:90, significanceMask(1,:),'r.','MarkerSize',10);%,'EdgeColor',[1 0 0]);
 			xlim([6 50]);
+			ylim([-1 4]);
 
 			subplot(nSubjects,4,4*(subjIdx-1)+2,'NextPlot','add')
-			plot(1:90,walkPsd(1,:),'r'),
+			plot(1:90,squeeze(mean(walkPsd(1,:,:),2)),'r'),
 			plot(1:90,squeeze(mean(standPsd(1,:,:),2)),'b');
 			xlim([6 50]);
 			
 			subplot(nSubjects,4,4*(subjIdx-1)+3,'NextPlot','add')
-			plot(1:90,squeeze(mean(relChange(2,:,:),3)))
+			plot(1:90,relChange(2,:))
+			plot(1:90, significanceMask(2,:),'r.','MarkerSize',10);%,'EdgeColor',[1 0 0]);
 			xlim([6 50]);
+			ylim([-1 4]);
 
 			subplot(nSubjects,4,4*(subjIdx-1)+4,'NextPlot','add')
-			plot(1:90,walkPsd(2,:),'r');
+			plot(1:90,squeeze(mean(walkPsd(2,:,:),2)),'r'),
 			plot(1:90,squeeze(mean(standPsd(2,:,:),2)),'b');
 			xlim([6 50]);
 
 
 	end % subject loop
+	clearvars walkData standData
 end % function
 
 
-function [pvalue, unCorrpvalue] = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStance)
+function [pvalue, unCorrpvalue] = runPermutationTest(dataObs,dataA,dataB,nPermutation,alpha)
 %RUNPERMUTATIONTEST Description
 %	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
 %
-		pvalue  	= zeros(1,800,84);
-		nSwing  	= size(dataRaw,1);
-
-		dataPerm	= dataRaw;
+		pvalue  	 = zeros(1,90);
+		nStanding  = size(dataB,2);
+		pooledData = cat(2,dataA,dataB);
 
 		% we perform a permutation test for each STN separatelly
 		for permIdx = 1:nPermutation
-			
-			% for each swing we randomly split the signal in two chunks 
-			% and rotate them
-			for swingIdx = 1:nSwing
 
-				dataPerm(swingIdx,:,:) = randCircShift(dataRaw(swingIdx,:,:)); 
+			riffledIndices = randperm(size(pooledData,2));
 
-			end
+			standPsd = pooledData(:,riffledIndices(1:nStanding),:);
+			walkPsd	= pooledData(:,riffledIndices(nStanding+1:end),:);
 			
 			% compute permutated statistics
-			dataPerm = bsxfun(@rdivide,bsxfun(@minus,dataPerm,...
-									mean(dataPerm(:,referenceStance(2):referenceStance(3),:),2)),...
-									 std(dataPerm(:,referenceStance(2):referenceStance(3),:),[],2));
-
-			% average across swing
-			dataPerm = mean(dataPerm);
-
+			dataPerm = (squeeze(mean(walkPsd,2)) - squeeze(mean(standPsd,2)))./squeeze(mean(standPsd,2));
+		
 			% compute pvalues for all frequencies and all time points.
-			pvalue = pvalue + double(dataPerm > dataObs)./nPermutation;
+			pvalue = pvalue + double(dataPerm' > dataObs)./nPermutation;
 
 		end
 		unCorrpvalue = pvalue;
-		pvalue = fdrCorrection(pvalue,0.05);
+		pvalue = fdrCorrection(pvalue,alpha);
 
 end
 
-function A = randCircShift(A)
-
-		idx 			= randi(size(A,2),1);
-		A(1,:,:) 	= cat(2,A(1,idx:end,:),A(1,1:idx-1,:));
-
-end
 
 function pvalue = fdrCorrection(pvalue, alpha)
 %FDRCORRECTION Description
