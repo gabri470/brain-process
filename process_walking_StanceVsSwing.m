@@ -181,7 +181,26 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			plotIdx = 1;
 
-			for strideIdx = 3:2:nStrides*2+2
+			strideCheck = evNames(bsxfun(@plus,(-2:2),(3:2:numel(evNames)-2)'));
+			nStrides = size(strideCheck,1);
+			matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
+						'heelcontact_[R|L]','toeoff_[L|R]','heelcontact_[L|R]'};
+			orderCheck = nan(1,nStrides);
+
+			for el = 1:nStrides
+					orderCheck(el) = sum(cellfun(@isempty,cellfun(@regexp,strideCheck(el,:),...
+															matchingString,'uni',false)));
+			end
+
+			for strideIdx = 3:2:numel(evNames)-2
+					
+					% if the stride contains bad steps 
+					% we skip it and continue to the next
+					if ismember(plotIdx,strideRej) || orderCheck(plotIdx) > 0
+							plotIdx = plotIdx + 1;
+							continue;
+					end
+
 
 					% if the stride contains bad steps 
 					% we skip it and continue to the next
@@ -227,14 +246,22 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					%    ^ start-2		|t0				      ^ start + 2 == end stride
 					timeWindow = strideStart(strideIdx) + (-399:400);
 					freqMask 	 = walkingStruct.Freqs > 6;
-					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
+					try
+						dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
+					catch
+							p=0;
+					end
 
 					strideRaw	 = signals(:,timeWindow)'.*1e6;
 					f 				 = walkingStruct.Freqs(freqMask);	
 
 					% then create the time-warping vector
-					originalVector = [1 (strideStart((-2:1:2) + strideIdx) ...
+					try
+						originalVector = [1 (strideStart((-2:1:2) + strideIdx) ...
 																	- timeWindow(1))  800];
+					catch
+							p = 0;
+					end
 
 					if sProcess.options.doWarping.Value
 
@@ -356,44 +383,50 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	for ii = 1:nSubjects
 
-			pvalue(:,1) = runPermutationTest(stnMeans{ii,1},...
+			[corrPvalue(:,1), pvalue(:,1)] = runPermutationTest(stnMeans{ii,1},...
 					stanceTcourse{ii,1},swingTcourse{ii,1},100);
-			pvalue(:,2) = runPermutationTest(stnMeans{ii,2},...
+			[corrPvalue(:,2), pvalue(:,2)] = runPermutationTest(stnMeans{ii,2},...
 					stanceTcourse{ii,2},swingTcourse{ii,2},100);
 
 			
-			% need multiple comparison correction Bonferroni or FDR
-			significanceMask = nan(size(pvalue));
-			significanceMask(pvalue < 0.05) = 4;
+			% need multiple comparison correction  FDR
+			corrSignificanceMask = nan(size(corrPvalue));
+			corrSignificanceMask(corrPvalue < 0.05) = 4;
+
+			unCorrSignificanceMask = nan(size(pvalue));
+			unCorrSignificanceMask(pvalue < 0.05) = 4;
+
 
 			% this is the STN- 
-			subplot(nSubjects,4,4*(ii-1)+1)
-			imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
-			axis xy;
-			set(gca,'XTickLabel',[]);
-			xlim([min(tAxis) max(tAxis)]);
-			ylim([6 80]);
+%			subplot(nSubjects,4,4*(ii-1)+1)
+%			imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
+%			axis xy;
+%			set(gca,'XTickLabel',[]);
+%			xlim([min(tAxis) max(tAxis)]);
+%			ylim([6 80]);
 
-			subplot(nSubjects,4,4*(ii-1)+2,'NextPlot','add')
-			plot(squeeze( mean(stnMeans{ii,1},2)),f)
-			plot([-3 3;-3 3],[0 0;90 90],'k--');	
-			plot(significanceMask(:,1),f,'ro','MarkerSize',2);
-			ylim([6 80]);
-			xlim([-5 5]);
+			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add')
+			plot(f,squeeze( mean(stnMeans{ii,1},2)))
+			plot([0 0;90 90],[-3 3;-3 3],'k--');	
+			plot(f,unCorrSignificanceMask(:,1),'k.','MarkerSize',16);
+			plot(f,corrSignificanceMask(:,1),'r.','MarkerSize',16);
+			xlim([6 80]);
+			ylim([-5 5]);
 
-			subplot(nSubjects,4,4*(ii-1)+3)
-			imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
-			axis xy;
-			set(gca,'XTickLabel',[]);
-			xlim([min(tAxis) max(tAxis)]);
-			ylim([6 80]);
+%			subplot(nSubjects,4,4*(ii-1)+3)
+%			imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
+%			axis xy;
+%			set(gca,'XTickLabel',[]);
+%			xlim([min(tAxis) max(tAxis)]);
+%			ylim([6 80]);
 
-			subplot(nSubjects,4,4*(ii-1)+4,'NextPlot','add')
-			plot(squeeze(mean(stnMeans{ii,2},2)),f)
-			plot([-3 3;-3 3],[0 0;90 90],'k--');	
-			plot(significanceMask(:,2),f,'ro','MarkerSize',2),2;
-			ylim([6 80]);
-			xlim([-5 5]);
+			subplot(nSubjects,2,2*(ii-1)+2,'NextPlot','add')
+			plot(f,squeeze(mean(stnMeans{ii,2},2)))
+			plot([0 0;90 90],[-3 3;-3 3],'k--');	
+			plot(f,unCorrSignificanceMask(:,2),'k.','MarkerSize',16);
+			plot(f,corrSignificanceMask(:,2),'r.','MarkerSize',16);
+			xlim([6 80]);
+			ylim([-5 5]);
 
 	end
 	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');

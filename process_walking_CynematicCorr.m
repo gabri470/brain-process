@@ -1,4 +1,4 @@
-function varargout = process_walking_CynematicCorr( varargin )
+function varargout = process_walking_CinematicCorr( varargin )
 % PROCESS_EXAMPLE_CUSTOMAVG: Example file that reads all the data files in input, and saves the average.
 
 % @=============================================================================
@@ -42,25 +42,15 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.nMinFiles   = 1;
     % Definition of the options
 		% Sensor types
-		sProcess.options.sensortypes.Comment = 'Sensor types or names: ';
-		sProcess.options.sensortypes.Type    = 'text';
-		sProcess.options.sensortypes.Value   = 'SEEG';
 
-		sProcess.options.doWarping.Comment = 'time warping ';
-		sProcess.options.doWarping.Type    = 'checkbox';
-		sProcess.options.doWarping.Value   = true;
 
-		sProcess.options.saveOutput.Comment = 'Save output to brainstormDB';
-		sProcess.options.saveOutput.Type    = 'checkbox';
-		sProcess.options.saveOutput.Value   = false;
+		sProcess.options.outputLabel.Type = 'text';
+		sProcess.options.outputLabel.Comment = ' Output string ';
+		sProcess.options.outputLabel.Value = '';
 
-		sProcess.options.method.Comment = 'Method:';
-		sProcess.options.method.Type    = 'text';
-		sProcess.options.method.Value   = 'zscore';
 
-		sProcess.options.normalizeOnStride.Comment = 'Normalize On Stride';
-		sProcess.options.normalizeOnStride.Type = 'checkbox';
-		sProcess.options.normalizeOnStride.Value = false; 
+   
+
 
 end
 
@@ -73,327 +63,97 @@ end
 
 %% ===== RUN =====
 function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
-
-	nFiles = numel(sInputs);
-
+%
+%	nFiles = numel(sInputs);
+%
 	DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
   trialRejectionFile = fullfile(DATA_FOLDER,'trialRejection.csv');
   [patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
 																				'%s %*s %*s %*s%s%d%*s','delimiter',',');
 
-	sideFile = fullfile(DATA_FOLDER,'patientSides.csv');
-	[subjectNames, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
 	
-	cynematicFile = fullfile(DATA_FOLDER,'cynematicFile.csv');
-	[subName, trials, stepIndices, sideStances, velocities, lenghts] = ...
-			textread(cynematicFile,'%s %s %d %s %f %f\n','delimiter',',','headerlines',1);
 
-	[~,subIndices] 	= ismember(unique(subName),subName);
-	subOffsets 			= [diff(subIndices) numel(subName)-subIndices(end)+1];
-	velocities 			= mat2cell(velocities,subOffsets);
-	lenghts 				= mat2cell(lenghts,subOffsets);
-	stepIndices 		= mat2cell(stepIndices,subOffsets);
+		strOut = sProcess.options.outputLabel.Value;
 
-	OutputFiles = {};
+		fnameOut = fullfile(DATA_FOLDER,strOut);
+		fid = fopen(fnameOut,'w');
 
-	nSubjects = numel(unique([{sInputs.SubjectName}]));
-	stnResults = cell(nSubjects,2); % this var holds for each subjects the STN-/+ power for each stride
-	currentSubject = [];
-	subjectIdx = 0;
-	subjectNameOrdered = cell(nSubjects,1);
+    % Initialize returned list of files
+    OutputFiles = {};
 
-	swingTAvg = cell(nSubjects,2);
-	stanceTAvg = cell(nSubjects,2);
+		for file = 1:numel(sInputs)
 
-	for fileIdx = 1:nFiles; 
-
-			walkingStruct = in_bst_timefreq(sInputs(fileIdx).FileName); 
-
-			parentStruct 	= bst_process('GetInputStruct',walkingStruct.DataFile);
-			parentData 		= in_bst(parentStruct.FileName);
-			channelData		= in_bst_channel(sInputs(fileIdx).ChannelFile);
-			iChannels			= channel_find(channelData.Channel,'SEEG');
-			signals				= parentData.F(iChannels,:);
-
-			mostAffSide		= mostAffSides(strcmpi(subjectNames,(sInputs(fileIdx).SubjectName) ));
-
-			if isempty(currentSubject) || ~strcmp(currentSubject,sInputs(fileIdx).SubjectName)
-				currentSubject = sInputs(fileIdx).SubjectName;
-				subjectIdx = subjectIdx + 1;
-				subjectNameOrdered{subjectIdx} = sInputs(fileIdx).SubjectName;
-			end
-
-			fs = round(1/mean(diff( parentData.Time )));
-
-			% filter cardiac events from gait-related events
-			evGroupNames = {parentData.Events.label};
-			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'[heel|toe]'));
-
-			% concat all heel contact events in order to have
-			% a vector of latencies of this form: e.g.
-			% hc_L *tof_R hc_R *tof_L hc_L *tof_R hc_R *tof_L hc_L *tof_R
-			[strideStart,ord]		= sort([parentData.Events(gaitEventGroups).samples]);
-
-			% extract event names
-			for evIdx = find(gaitEventGroups)
-			
-					evLabels{:,evIdx} = repmat({parentData.Events(evIdx).label},...
-							[1 numel(parentData.Events(evIdx).samples)]);		
-
-			end
-
-			% re-order event names accordingly
-			evNames 	= [evLabels{:}];
-			evNames 	= evNames(ord);
-	
-			% count how many strides we have recorded
-			nStrideLeft 	= sum(strcmp(evNames,'heelcontact_L'))-1; 
-			nStrideRight	= sum(strcmp(evNames,'heelcontact_R'))-1; 
-			nStrides 			= nStrideLeft + nStrideRight;
-
-			% prepare event mask to reject artefactual or incomplete step
-			trialString 	= regexp(sInputs(fileIdx).Condition,'trial\d+','match');
-			subjMask 			= ismember(lower(patNames),lower(sInputs(fileIdx).SubjectName)); 
-			trialMask 		= (ismember(lower(trialStrings),lower(trialString)));
-			stepRej  			= stepIds(and(subjMask,trialMask));
-
-			% stride mask - each stride is composed by two steps
-			strideIndexes = [1:nStrides;2:nStrides+1]';
-			strideRej 		= find(sum(ismember(strideIndexes,stepRej),2));
-
-			% prepare plot order
-			nRowsInPlot		= nStrideLeft+nStrideRight+1;
-			plotOrder 		= mat2cell(reshape(1:nRowsInPlot*4,4,nRowsInPlot)',ones(nRowsInPlot,1),[2 2]);
-
-			% we have to correct the event adding the offset
-			% since they are referred to the 0 of the raw data 
-			evOffset 			= round(walkingStruct.Time(1)*fs);
-			strideStart 	= strideStart - evOffset;
-
-			% we create the normalized stride time vector
-			referenceTimeVector = -1:1/fs:(1-1/fs);
-			doubleSuppDur 			= floor(0.19*fs);
-			singleSuppDur 			= floor(0.4*fs);
-
-			referenceStance 		= 400 + [ -doubleSuppDur-singleSuppDur -singleSuppDur 0 ...
-																			+doubleSuppDur +doubleSuppDur+singleSuppDur ];
-
-			referenceVector			= [1 referenceStance 800];
-
-			strideIdx = 1;
-
-			for elemIdx = 3:2:nStrides*2+2
+				% read data in
+				DataMat = in_bst_timefreq(sInputs(file).FileName);
+				parentStruct = bst_process('GetInputStruct',DataMat.DataFile);
+				parentData = in_bst(parentStruct.FileName);
 
 
-					% if the stride contains bad steps 
-					% we skip it and continue to the next
-					if ismember(strideIdx,strideRej)
-							strideIdx = strideIdx + 1;
-							continue;
-					end
+				% filter step rejection list for
+				% a given subject
+				subjMask = ismember(lower(patNames),lower(sInputs(file).SubjectName));
+				trialString = regexp(sInputs(file).Condition,'trial\d+','match');
+				trialMask = ~cellfun(@isempty,regexp(trialStrings,trialString));
+				stepReject = stepIds(subjMask & trialMask);
+				
+				% extract event names
+				evNames = {parentData.Events.label};
+				
+				% search event heel L and heel R
+				leftHeelEvIdx = strcmp(evNames,'heelcontact_L');
+				rightHeelEvIdx = strcmp(evNames,'heelcontact_R');
 
-					%								[ idx ] 	
-					% (hc_L) *tof_R  hc_R   *tof_L (hc_L) 
-					%    ^ start-2		|t0				      ^ start + 2 == end stride
-					timeWindow = strideStart(elemIdx) + (-399:400);
-					freqMask 	 = walkingStruct.Freqs > 6;
-					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
+				fs = round(1/mean(diff( parentData.Time )));
 
-					stepVelocities = velocities{subjectIdx};
-					stepLenghts		 = lenghts{subjectIdx};
+				% compute offset
+				offset = round(parentData.Time(1)*fs);
+
+				leftHeelEvSamples = parentData.Events(leftHeelEvIdx).samples;
+				rightHeelEvSamples = parentData.Events(rightHeelEvIdx).samples;
+
+				% we create a lookup table for foot order
+				% hc_L marks a right foot swing 
+				% on the other hand, hc_R marks a left foot swing 
+				% thus we switch labels at this level
+				footLabels = [ repmat({'R'},1,numel(leftHeelEvSamples)), ...
+						repmat({'L'},1,numel(rightHeelEvSamples))];
+
+				[heelEvSamples, ord] = sort([leftHeelEvSamples(:);rightHeelEvSamples(:)]);
+
+				% since Brainstorm saves samples from the beginning of the original file
+				% even though we extracted a portion of it, we need recompute the exact
+				% samples within the time window of interest
+				heelEvSamples = heelEvSamples - offset;
+
+				footLabels = [footLabels{ord}];
+
+				stringTokens = regexp(parentStruct.Condition,'_','split');
+
+				betaBand = DataMat.Freqs >= 13 & DataMat.Freqs < 30;
+				gammaBand = DataMat.Freqs >= 30 & DataMat.Freqs < 60;
+
+				nSwings = numel(leftHeelEvSamples) + numel(rightHeelEvSamples)-1;
+
+				betaPower = squeeze(mean(DataMat.TF(:,:,betaBand),3));
+				gammaPower = squeeze(mean(DataMat.TF(:,:,gammaBand),3));
+
+				swingIndicies = setdiff(1:nSwings,stepReject);
+
+				for iSwing = swingIndicies
+
+						betaInStep = sum(betaPower(:,heelEvSamples(iSwing):heelEvSamples(iSwing+1)),2).*1e12;
+						gammaInStep = sum(gammaPower(:,heelEvSamples(iSwing):heelEvSamples(iSwing+1)),2).*1e12;
+						
+						% subject, condition, speed, drug, trial, swingN, foot, betaR,betaL
+						fprintf(fid,'%s %s %s %s %s %d %s %e %e %e %e\n',...
+								stringTokens{1:5},iSwing,footLabels(iSwing),betaInStep(:),gammaInStep(:));
+
+				end
 			
 
-					strideRaw	 = signals(:,timeWindow)'.*1e6;
-					f 				 = walkingStruct.Freqs(freqMask);	
+		end
+    
+		fclose(fid);
 
-					% then create the time-warping vector
-					originalVector = [1 (strideStart((-2:1:2) + elemIdx) - timeWindow(1))  800];
-
-					if sProcess.options.doWarping.Value
-
-							% compute the mixing matrix that maps the single orignal
-							% stance on the normalized stance
-							mixingMatrix 	 = mytimewarp(referenceVector,originalVector,3);
-
-							% apply warping at each channel separately for both TF 
-							finalTF(1,:,:) = mixingMatrix * squeeze(dataTF(1,:,:));
-							finalTF(2,:,:) = mixingMatrix * squeeze(dataTF(2,:,:));
-					
-							% and raw data
-							finalRaw(1,:)	 = mixingMatrix * strideRaw(:,1);
-							finalRaw(2,:)	 = mixingMatrix * strideRaw(:,2);
-
-							zLimit 		= [-2 2];
-							tEvAxis 	= repmat(referenceTimeVector(referenceStance([2 3 4])),2, 1);
-
-							% tf_* -> hc_*
-							stanceWnd	= referenceStance(2):referenceStance(3);
-							% tf_* -> hc_*
-							swingWnd	= referenceStance(4):referenceStance(5);
-							tAxis			= referenceTimeVector;
-
-					else
-							finalTF 	= dataTF.*1e12;
-							finalRaw	= strideRaw';
-							zLimit 		= [min(finalTF(:)) max(finalTF(:))];
-							tAxis			= (-399:400)/fs;
-							tEvAxis 	= repmat(originalVector([3 4 5])./400,2, 1);
-					end
-
-					footLabel 		 	= regexp(evNames(elemIdx),'[L|R]','match');
-					footLabel				= footLabel{:}{:}; % this is the label of the central hc event
-
-					plotOrderStride	= plotOrder(strideIdx,:);
-
-					% we need to switch foot Label since a left foot stride
-					% will have a hcR event as central (t0) event
-					% stnIdx are ordered as STN- first and STN+ next
-					if strcmp(footLabel,'L')
-							% right foot stride
-							footLabel 	 = 'R';
-							controLatIdx = 2;
-							if strcmp(mostAffSide,'L')
-								plotOrderStride	= plotOrderStride{1};
-								stnIdx					= 1;
-							else 
-								plotOrderStride = plotOrderStride{2};
-								stnIdx					= 2;
-							end
-					else 
-
-							% left foot stride
-							footLabel 	 = 'L';
-							controLatIdx = 1;
-							if strcmp(mostAffSide,'L')
-								plotOrderStride	= plotOrderStride{2};
-								stnIdx					= 2;
-							else 
-								plotOrderStride = plotOrderStride{1};
-								stnIdx					=1;
-							end
-					end
-
-					if sProcess.options.normalizeOnStride.Value
-							normFactor 	= repmat(mean(finalTF,2),[1 numel(timeWindow) 1]);
-							A 					= finalTF./normFactor;
-							swingData 	= A(controLatIdx,swingWnd,:);
-							stanceData	= A(controLatIdx,stanceWnd,:);
-
-					end
-
-
-					% relative change 
-					finalTFZScored = bsxfun(@rdivide,bsxfun(@minus,finalTF(:,stanceWnd,:),...
-																mean(finalTF(:,swingWnd,:),2)),...
-																std(finalTF(:,swingWnd,:),2));
-
-
-					stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
-																									finalTFZScored(controLatIdx,:,:));
-
-					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
-					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
-					
-					if sProcess.options.saveOutput.Value
-							% save each stance in separate file
-							% get the output study
-							iStudy 						= sInputs(fileIdx).iStudy;
-							DataMat 					= walkingStruct;
-							DataMat.Freqs			= f;
-							DataMat.Time			= time;
-							DataMat.TF        = finalTF;
-							DataMat.DataType  = 'data';
-							DataMat.Comment		= sprintf('Stride %s (#%d)',footLabel,strideIdx);
-										
-							% Create a default output filename 
-							OutputFiles{fileIdx} = bst_process('GetNewFilename', ...
-									fileparts(sInputs(fileIdx).FileName), 'timefreq');
-
-							% Save on disk
-							save(OutputFiles{fileIdx}, '-struct', 'DataMat');
-
-							% Register in database
-							db_add_data(iStudy, OutputFiles{fileIdx}, DataMat);
-
-					end
-					strideIdx = strideIdx + 1;
-					clear finalTF;
-
-			end % for stride
-
-			clear finalTF;
-
-	end % for sInputs files
-
-	% stnResults holds the zscored-power modulation (1,t,f) for stance {:,:,1} and swing {:,:,2}
-	% for each subjects {ii,:,:} and each strides and for both STN- {:,1,:} and STN+ {:,2,:}.
-	% We first average each element of stnResults across time in order to have 
-	% a frequency modulation
-	stnMeans	 = cellfun(@mean,stnResults,'UniformOutput',false);
-%	stnResults = cellfun(@mean,stnResults,repmat({2},size(stnResults)),'UniformOutput',false);
-
-	f2 = figure('papertype','a4','paperposition',[0 0 1 1],'paperunits','normalized',...
-										'paperorientation','portrait','Visible','on');
 	
-	folder = 'original';
-	pvalue = ones(numel(f),2);
-
-	for ii = 1:nSubjects
-
-			for freqPoint = 1:numel(f)
-				% for each STN-/+ and for each frequency we compute the wilcoxon ranksum test
-				% to compare stance and swing periods in terms of beta power
-				pvalue(freqPoint,1) = ranksum(stanceTAvg{ii,1}(freqPoint,:),...
-																			swingTAvg{ii,1}(freqPoint,:));
-				pvalue(freqPoint,2) = ranksum(stanceTAvg{ii,2}(freqPoint,:),...
-																			swingTAvg{ii,2}(freqPoint,:));
-
-			end
-			
-			% need multiple comparison correction Bonferroni or FDR
-			significanceMask = nan(size(pvalue));
-			significanceMask(pvalue < 0.05) = 4;
-
-			% this is the STN- 
-			subplot(nSubjects,4,4*(ii-1)+1)
-			imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
-			axis xy;
-			set(gca,'XTickLabel',[]);
-			xlim([min(tAxis) max(tAxis)]);
-			ylim([6 80]);
-
-			subplot(nSubjects,4,4*(ii-1)+2,'NextPlot','add')
-			plot(squeeze( mean(stnMeans{ii,1},2)),f)
-			plot([-3 3;-3 3],[0 0;90 90],'k--');	
-			plot(significanceMask(:,1),f,'ro','MarkerSize',2);
-			ylim([6 80]);
-			xlim([-5 5]);
-
-			subplot(nSubjects,4,4*(ii-1)+3)
-			imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
-			axis xy;
-			set(gca,'XTickLabel',[]);
-			xlim([min(tAxis) max(tAxis)]);
-			ylim([6 80]);
-
-			subplot(nSubjects,4,4*(ii-1)+4,'NextPlot','add')
-			plot(squeeze(mean(stnMeans{ii,2},2)),f)
-			plot([-3 3;-3 3],[0 0;90 90],'k--');	
-			plot(significanceMask(:,2),f,'ro','MarkerSize',2),2;
-			ylim([6 80]);
-			xlim([-5 5]);
-
-%			fname = fullfile('/home','lgabri','Desktop','walking',folder,'wavelet',subjectNameOrdered{ii},...
-%					'avgZScoreStancevSwing.ps');
-
-
-	end
-			annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
-			annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
-
-			fname = fullfile('/home','lgabri','Desktop','walking',folder,'wavelet',...
-					'avgZScoreStancevSwing.ps');
-
-			print(f2,'-dpsc2',fname);
-		
 end % function

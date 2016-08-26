@@ -72,7 +72,7 @@ function sInputs = Run(sProcess, sInputs) %#ok<DEFNU>
 
 
 				signals = sInputs.A(iChannels,timeWnd(:));
-				signals = reshape(signals',[241 numel(evCardiacSamples) 2]);
+				signals = reshape(signals',[size(timeWnd,1) numel(evCardiacSamples) 2]);
 				artefact = squeeze(mean(signals,2));
 
 				artefact= bsxfun(@times,artefact,kernel(:));

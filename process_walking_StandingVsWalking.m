@@ -85,7 +85,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			walkingFileIdx = find(subjectMask & walkingConMask);
 
 			% read standing time-freq data
-			standingStruct = in_bst_timefreq(sInputs(standingFileIdx).FileName);
+			standingStruct 	= in_bst_timefreq(sInputs(standingFileIdx).FileName);
+			parentStruct 		= bst_process('GetInputStruct',standingStruct.DataFile);
+			standChannels 	= in_bst_channel(parentStruct.ChannelFile);
+			standiChannels	= channel_find( standChannels.Channel,'SEEG');
 
 			% we should cycle through walking trials
 			% compute the min length in order to do 
@@ -126,7 +129,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			% we separate chucks of standing of walkingRefLength in order to 
 			% make periods with the same time lengths 
-			standData = reshape(standingStruct.TF(:,1:(nWindows*walkingRefLength),:),...
+			standData = reshape(standingStruct.TF(standiChannels,1:(nWindows*walkingRefLength),:),...
 																[2,nWindows,walkingRefLength,90]);
 
 
@@ -136,6 +139,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					walkingStruct = in_bst_timefreq(sInputs(walkingFileIdx(walkTrialIdx)).FileName);
 					parentStruct 	= bst_process('GetInputStruct',walkingStruct.DataFile);
 					parentData 		= in_bst(parentStruct.FileName);
+%					walkChannels 	= in_bst_channel(parentStruct.ChannelFile);
+%					walkiChannels	= channel_find( walkChannels.Channel,'SEEG');
 		
 					% filter cardiac and peakVelocity events from gait-related events
 					evGroupNames = {parentData.Events.label};
@@ -190,29 +195,24 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			end
 
 			significanceMask = nan(2,90);
-			significanceMask(pvalue < 0.05) = 3;
+			significanceMask(1,pvalue(1,:) < 0.05) = 3;
+			significanceMask(2,pvalue(2,:) < 0.05) = 3.4;
 
-			subplot(nSubjects,4,4*(subjIdx-1)+1,'NextPlot','add')
-			plot(1:90,relChange(1,:))
-			plot(1:90, significanceMask(1,:),'r.','MarkerSize',10);%,'EdgeColor',[1 0 0]);
-			xlim([6 50]);
+			subplot(nSubjects,2,2*(subjIdx-1)+1,'NextPlot','add')
+			plot(1:90,relChange(1,:),'r')
+			plot(1:90,significanceMask(1,:),'r.','MarkerSize',10);%,'EdgeColor',[1 0 0]);
+
+			plot(1:90,relChange(2,:),'c')
+			plot(1:90, significanceMask(2,:),'c.','MarkerSize',10);%,'EdgeColor',[1 0 0]);
+			xlim([6 40]);
 			ylim([-1 4]);
 
-			subplot(nSubjects,4,4*(subjIdx-1)+2,'NextPlot','add')
+			subplot(nSubjects,2,2*(subjIdx-1)+2,'NextPlot','add')
 			plot(1:90,squeeze(mean(walkPsd(1,:,:),2)),'r'),
-			plot(1:90,squeeze(mean(standPsd(1,:,:),2)),'b');
-			xlim([6 50]);
-			
-			subplot(nSubjects,4,4*(subjIdx-1)+3,'NextPlot','add')
-			plot(1:90,relChange(2,:))
-			plot(1:90, significanceMask(2,:),'r.','MarkerSize',10);%,'EdgeColor',[1 0 0]);
-			xlim([6 50]);
-			ylim([-1 4]);
-
-			subplot(nSubjects,4,4*(subjIdx-1)+4,'NextPlot','add')
-			plot(1:90,squeeze(mean(walkPsd(2,:,:),2)),'r'),
-			plot(1:90,squeeze(mean(standPsd(2,:,:),2)),'b');
-			xlim([6 50]);
+			plot(1:90,squeeze(mean(standPsd(1,:,:),2)),'r--');
+			plot(1:90,squeeze(mean(walkPsd(2,:,:),2)),'c'),
+			plot(1:90,squeeze(mean(standPsd(2,:,:),2)),'c--');
+			xlim([6 40]);
 
 
 	end % subject loop

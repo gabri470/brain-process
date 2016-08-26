@@ -101,8 +101,13 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 				stringTokens = regexp(parentStruct.Condition,'_','split');
 
+				betaBand = DataMat.Freqs >= 13 & DataMat.Freqs < 30;
+				gammaBand = DataMat.Freqs >= 30 & DataMat.Freqs < 60;
 
 				nSwings = numel(leftHeelEvSamples) + numel(rightHeelEvSamples)-1;
+
+%				betaPower = mean(DataMat.TF(
+
 				for iSwing = 1:nSwings
 
 						betaInStep = sum(betaPower(:,heelEvSamples(iSwing):heelEvSamples(iSwing+1)),2).*1e12;

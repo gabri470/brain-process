@@ -157,8 +157,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			strideRej 		= find(sum(ismember(strideIndexes,stepRej),2));
 
 			% prepare plot order
-			nRowsInPlot		= nStrideLeft+nStrideRight+1;
-			plotOrder 		= mat2cell(reshape(1:nRowsInPlot*4,4,nRowsInPlot)',ones(nRowsInPlot,1),[2 2]);
+%			nRowsInPlot		= nStrideLeft+nStrideRight+1;
+%			plotOrder 		= mat2cell(reshape(1:nRowsInPlot*4,4,nRowsInPlot)',ones(nRowsInPlot,1),[2 2]);
 
 			% we have to correct the event adding the offset
 			% since they are referred to the 0 of the raw data 
@@ -177,12 +177,23 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			plotIdx = 1;
 
+			strideCheck = evNames(bsxfun(@plus,(-2:2),(3:2:numel(evNames)-2)'));
+			nStrides = size(strideCheck,1);
+			matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
+						'heelcontact_[R|L]','toeoff_[L|R]','heelcontact_[L|R]'};
+			orderCheck = nan(1,nStrides);
+
+			for el = 1:nStrides
+					orderCheck(el) = sum(cellfun(@isempty,cellfun(@regexp,strideCheck(el,:),...
+															matchingString,'uni',false)));
+			end
+
 			for strideIdx = 3:2:nStrides*2+2
 
 
 					% if the stride contains bad steps 
 					% we skip it and continue to the next
-					if ismember(plotIdx,strideRej)
+					if ismember(plotIdx,strideRej) || orderCheck(plotIdx) > 0
 							plotIdx = plotIdx + 1;
 							continue;
 					end
@@ -194,9 +205,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					freqMask 	 = walkingStruct.Freqs > 6;
 					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
 
-			
-
-					strideRaw	 = signals(:,timeWindow)'.*1e6;
+					strideRaw	 = signals(:,timeWindow)';
 					f 				 = walkingStruct.Freqs(freqMask);	
 
 					% then create the time-warping vector
@@ -226,7 +235,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 %							tAxis			= referenceTimeVector;
 
 					else
-							finalTF 	= dataTF.*1e12;
+							finalTF 	= dataTF;
 							finalRaw	= strideRaw';
 %							zLimit 		= [min(finalTF(:)) max(finalTF(:))];
 %							tAxis			= (-399:400)/fs;
@@ -276,62 +285,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					swing{subjectIdx,stnIdx} = cat(1,swing{subjectIdx,stnIdx},swingData);
 					stance{subjectIdx,stnIdx} = cat(1,stance{subjectIdx,stnIdx},stanceData);
 
-%					if strcmp(sProcess.options.method.Value,'zscore')
-%						% z score swing									
-%						swingZScored = bsxfun(@rdivide,bsxfun(@minus,finalTF(:,swingWnd,:),...
-%																			mean(finalTF(:,swingWnd,:),2)),...
-%																			std(finalTF(:,swingWnd,:),[],2));
-%						
-%						% z score stance
-%						stanceZScored = bsxfun(@rdivide,bsxfun(@minus,finalTF(:,stanceWnd,:),...
-%																			mean(finalTF(:,stanceWnd,:),2)),...
-%																			std(finalTF(:,stanceWnd,:),[],2));
-%
-%
-%						finalTFZScored = bsxfun(@rdivide,bsxfun(@minus,finalTF(:,stanceWnd,:),...
-%																mean(finalTF(:,swingWnd,:),2)),...
-%																std(finalTF(:,swingWnd,:),[],2));
-%
-%					elseif(strcmp(sProcess.options.method.Value,'rchange'))
-%						% relative change 
-%						finalTFZScored = bsxfun(@rdivide,bsxfun(@minus,finalTF(:,stanceWnd,:),...
-%																mean(finalTF(:,swingWnd,:),2)),...
-%																mean(finalTF(:,swingWnd,:),2));
-%
-%					else
-%						finalTFZScored = stanceZScored - swingZScored;
-%
-%					end
-
-%
-%					stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
-%																									finalTFZScored(controLatIdx,:,:));
-%
-%					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
-%					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
-%					
-%					if sProcess.options.saveOutput.Value
-%							% save each stance in separate file
-%							% get the output study
-%							iStudy 						= sInputs(fileIdx).iStudy;
-%							DataMat 					= walkingStruct;
-%							DataMat.Freqs			= f;
-%							DataMat.Time			= time;
-%							DataMat.TF        = finalTF;
-%							DataMat.DataType  = 'data';
-%							DataMat.Comment		= sprintf('Stride %s (#%d)',footLabel,plotIdx);
-%										
-%							% Create a default output filename 
-%							OutputFiles{fileIdx} = bst_process('GetNewFilename', ...
-%									fileparts(sInputs(fileIdx).FileName), 'timefreq');
-%
-%							% Save on disk
-%							save(OutputFiles{fileIdx}, '-struct', 'DataMat');
-%
-%							% Register in database
-%							db_add_data(iStudy, OutputFiles{fileIdx}, DataMat);
-%
-%					end
 					plotIdx = plotIdx + 1;
 					clear finalTF;
 

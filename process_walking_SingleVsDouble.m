@@ -178,18 +178,23 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			referenceVector			= [1 referenceStance 800];
 			plotIdx = 1;
 
-			for strideIdx = 3:2:nStrides*2+2
+			strideCheck = evNames(bsxfun(@plus,(-2:2),(3:2:numel(evNames)-2)'));
+			nStrides = size(strideCheck,1);
+			matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
+						'heelcontact_[R|L]','toeoff_[L|R]','heelcontact_[L|R]'};
 
+			orderCheck = ones(1,nStrides);
 
-					% check that data are order correctly for each stride
-					matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
-									'heelcontact_[R|L]','toeoff_[L|R]','heelcontact_[R|L]'};
-					orderCheck = sum(cellfun(@isempty,cellfun(@regexp,evNames((-2:2)+strideIdx),...
-																									matchingString,'uni',false)));
+			for el = 1:nStrides
+					orderCheck(el) = sum(cellfun(@isempty,cellfun(@regexp,strideCheck(el,:),...
+															matchingString,'uni',false)));
+			end
+
+			for strideIdx = 3:2:numel(evNames)-2
 
 					% if the stride contains bad steps 
 					% we skip it and continue to the next
-					if ismember(plotIdx,strideRej) || orderCheck > 0
+					if ismember(plotIdx,strideRej) || orderCheck(plotIdx) > 0
 							plotIdx = plotIdx + 1;
 							continue;
 					end
@@ -199,7 +204,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					%    ^ start-2		|t0				      ^ start + 2 == end stride
 					timeWindow = strideStart(strideIdx) + (-399:400);
 					freqMask 	 = walkingStruct.Freqs > 6;
-					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask).*1e12;
+					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
 
 					if (sProcess.options.normOnStride.Value) 
 							% normalize on stride
@@ -218,7 +223,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					fprintf('[%d]',strideIdx);
 					fprintf('%s ',evNames{(-2:2) + strideIdx});
 					fprintf('\n');
-					strideRaw	 = signals(:,timeWindow)'.*1e6;
+					strideRaw	 = signals(:,timeWindow)';
 					f 				 = walkingStruct.Freqs(freqMask);	
 
 					% then create the time-warping vector
@@ -244,11 +249,11 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							tEvAxis = repmat(referenceTimeVector(referenceStance([2 3 4])),2, 1);
 
 					else
-							finalTF 	= dataTF.*1e12;
+							finalTF 	= dataTF;
 							finalRaw	= strideRaw';
 							zLimit 		= [min(finalTF(:)) max(finalTF(:))];
 							tAxis			= (-399:400)/fs;
-							tEvAxis 	= repmat(originalVector([3 4 5])./400,2, 1);
+							tEvAxis 	= repmat(originalVector([3 4 5])./fs,2, 1);
 					end
 
 					footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
@@ -306,17 +311,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					clear finalTF;
 
 			end % for stride
-
-%			conditionString = sInputs(fileIdx).Condition;
-%			trialIdx = str2double(cell2mat(regexp(conditionString(strfind(conditionString,'trial'):...
-%					strfind(conditionString,'trial')+7),'\d+','match')));
-%
-%			folder = cell2mat(lower(regexp(sInputs(fileIdx).Comment,...
-%					'(Original|Normalized|RestingState)','match')));
-%
-%			fname = fullfile('~/Desktop','walking',folder,'wavelet',sInputs(fileIdx).SubjectName,...
-%					sprintf('trial%d.png',trialIdx));
-%			print(f1,'-dpng',fname);
 
 			clear finalTF;
 

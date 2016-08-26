@@ -194,13 +194,23 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			referenceVector			= [1 referenceStance 800];
 			plotIdx = 1;
 
+			strideCheck = evNames(bsxfun(@plus,(-2:2),(3:2:numel(evNames)-2)'));
+			nStrides = size(strideCheck,1);
+
+			% check that data are order correctly for each stride
+			matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
+																	'peakVeloc_[R|L]',...
+													'heelcontact_[R|L]','toeoff_[L|R]'};
+			orderCheck = nan(1,nStrides);
+
+			for el = 1:nStrides
+					orderCheck(el) = sum(cellfun(@isempty,cellfun(@regexp,strideCheck(el,:),...
+															matchingString,'uni',false)));
+			end
+
 			for strideIdx = peakVelocIdx(peakVelocMask) 
 
-					% check that data are order correctly for each stride
-
-					matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
-																			'peakVeloc_[R|L]',...
-															'heelcontact_[R|L]','toeoff_[L|R]'};
+	
 					orderCheck = sum(cellfun(@isempty,cellfun(@regexp,evNames((-2:2)+strideIdx),...
 																									matchingString,'uni',false)));
 
@@ -216,7 +226,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					%    ^ start-2		|t0				      ^ start + 2 == end stride
 					timeWindow = strideStart(strideIdx) + (-399:400);
 					freqMask 	 = walkingStruct.Freqs > 6;
-					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask).*1e12;
+					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
 
 					if (sProcess.options.normOnStride.Value) 
 							% normalize on stride
@@ -235,7 +245,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					fprintf('[%d]',strideIdx);
 					fprintf('%s ',evNames{(-2:2) + strideIdx});
 					fprintf('\n');
-					strideRaw	 = signals(:,timeWindow)'.*1e6;
+					strideRaw	 = signals(:,timeWindow)';
 					f 				 = walkingStruct.Freqs(freqMask);	
 
 					% then create the time-warping vector
@@ -265,7 +275,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							finalRaw	= strideRaw';
 							zLimit 		= [min(finalTF(:)) max(finalTF(:))];
 							tAxis			= (-399:400)/fs;
-							tEvAxis 	= repmat(originalVector([3 4 5])./400,2, 1);
+							tEvAxis 	= repmat(originalVector([3 4 5])./fs,2, 1);
 					end
 
 					footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
