@@ -19,7 +19,7 @@ function varargout = process_walking_SingleVsDouble( varargin )
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-
+varargout = {};
 macro_methodcall;
 end
 
@@ -51,7 +51,7 @@ function sProcess = GetDescription() %#ok<DEFNU>
 		sProcess.options.normOnStride.Comment = 'Normalize on Stride';
 		sProcess.options.normOnStride.Type = 'checkbox';
 		sProcess.options.normOnStride.Value= false';
-	
+
 
 end
 
@@ -116,7 +116,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 %																				conditionString,'.txt'));
 
 
-			
+		  fprintf(' Trial %s\n',sInputs(fileIdx).Condition);
 			% compute sampling frequency
 			fs = round(1/mean(diff( parentData.Time )));
 
@@ -305,7 +305,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 
 					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
-					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
+%					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
 
 					plotIdx = plotIdx + 1;
 					clear finalTF;

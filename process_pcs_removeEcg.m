@@ -60,26 +60,54 @@ function sInputs = Run(sProcess, sInputs) %#ok<DEFNU>
 				ChannelMat = in_bst_channel(sInputs.ChannelFile);
 				iChannels = channel_find(ChannelMat.Channel,'SEEG');
 
-				evCardiacIdx = find(ismember({DataMat.Events.label},'cardiac'));
-
 				fs = round(1/mean(diff(DataMat.Time)));
+
+				% find indices of cardiac artefacts
+				evCardiacIdx = ismember({DataMat.Events.label},'cardiac');
 
 				offset = round(DataMat.Time(1)*fs);
 
+				% compute cardiac samples 
 				evCardiacSamples = DataMat.Events(evCardiacIdx).samples - offset;
-				timeWnd= bsxfun(@plus,(round(-100*.4):round(500*.4)),evCardiacSamples')';
-				kernel = tukeywin(size(timeWnd,1));
+				timeWnd= bsxfun(@plus,round(-.5*fs):round(.5*fs),evCardiacSamples')';
+
+				% reject events that are outside the analyses window
+				evCardiacMask = sum(timeWnd < 0,1)==0 & sum(timeWnd > max(size(sInputs.A)),1)==0; 
+				timeWnd = timeWnd(:,evCardiacMask);
+				evCardiacSamples = evCardiacSamples(evCardiacMask);
 
 
 				signals = sInputs.A(iChannels,timeWnd(:));
 				signals = reshape(signals',[size(timeWnd,1) numel(evCardiacSamples) 2]);
 				artefact = squeeze(mean(signals,2));
 
-				artefact= bsxfun(@times,artefact,kernel(:));
 
-				sInputs.A(iChannels,timeWnd) = sInputs.A(iChannels,timeWnd) - ...
-						repmat(artefact',1,numel(evCardiacSamples));
+				timeWnd = timeWnd';
+
+				for iCh = 1:2 
+						% lfpseg is events x t
+						lfpseg = squeeze(signals(:,:,iCh))';            
+						meanlfpseg = artefact(:,iCh);
+						clfpsegAdapt = zeros(size(timeWnd));
+
+						for ecgIdx = 1:numel(evCardiacSamples)
+
+								Amp = fminsearch(@(Amp)myminfun(Amp,lfpseg(ecgIdx,:)',...
+										tukeywin(length(meanlfpseg),0.2).*meanlfpseg),1);         
+
+								clfpsegAdapt(ecgIdx,:) = lfpseg(ecgIdx,:)'- ...
+										Amp*tukeywin(length(meanlfpseg),0.2).*meanlfpseg;
+						end
+
+						sInputs.A(iChannels(iCh),timeWnd(:)) = clfpsegAdapt(:);
+				end
 
 		end
 
+end
+
+
+function F = myminfun(Amp,lfp,art)
+
+	F = sqrt(sum((lfp - Amp*art).^2));
 end
