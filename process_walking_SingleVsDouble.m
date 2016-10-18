@@ -322,7 +322,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							 'paperunits','normalized','paperorientation',...
 								'portrait','Visible','on');
 
-	betaMask = f >= 6 & f <= 13;
+	highBetaMask = f >= 6 & f <= 19;
+	lowBetaMask = f >= 20 & f <= 35;
 	gammaMask  = f > 13 & f < 80;
 	for ii = 1:nSubjects
 
@@ -347,14 +348,16 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 
 			subplot(nSubjects*2,2,4*(ii-1)+3,'NextPlot','add')
-			plot(tAxis,mean(stnMostAff(:,betaMask),2),'r');
+			plot(tAxis,mean(stnMostAff(:,lowBetaMask),2),'r');
+			plot(tAxis,mean(stnMostAff(:,highBetaMask),2),'g');
 			plot(tAxis,mean(stnMostAff(:,gammaMask),2),'b');
 			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			ylim([-3 3]);
 
 			subplot(nSubjects*2,2,4*(ii-1)+4,'NextPlot','add')
-			plot(tAxis,mean(stnLessAff(:,betaMask),2),'r');
+			plot(tAxis,mean(stnLessAff(:,lowBetaMask),2),'r');
+			plot(tAxis,mean(stnLessAff(:,highBetaMask),2),'g');
 			plot(tAxis,mean(stnLessAff(:,gammaMask),2),'b');
 			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);

@@ -334,29 +334,21 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			end % for stride
 
-%			conditionString = sInputs(fileIdx).Condition;
-%			trialIdx = str2double(cell2mat(regexp(conditionString(strfind(conditionString,'trial'):...
-%					strfind(conditionString,'trial')+7),'\d+','match')));
-%
-%			folder = cell2mat(lower(regexp(sInputs(fileIdx).Comment,...
-%					'(Original|Normalized|RestingState)','match')));
-%
-%			fname = fullfile('~/Desktop','walking',folder,'wavelet',sInputs(fileIdx).SubjectName,...
-%					sprintf('trial%d.png',trialIdx));
-%			print(f1,'-dpng',fname);
-
 			clear finalTF;
 
 	end % for sInputs files
 
 	% stnResults holds ERSD for each stride divide as STN-/+
 	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
+
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
 							 'paperunits','normalized','paperorientation',...
 								'portrait','Visible','on');
 
-	betaMask = f >= 6 & f <= 13;
-	gammaMask  = f > 13 & f < 80;
+	highBetaMask = f >= 6 & f <= 19;
+	lowBetaMask = f >= 20 & f <= 35;
+	gammaMask  = f > 35 & f < 80;
+
 	for ii = 1:nSubjects
 
 			stnMostAff = squeeze(stnMeans{ii,1});
@@ -398,14 +390,16 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 %			ylim([6 80]);
 
 			subplot(nSubjects*2,2,4*(ii-1)+3,'NextPlot','add')
-			plot(tAxis,mean(stnMostAff(:,betaMask),2),'r');
+			plot(tAxis,mean(stnMostAff(:,highBetaMask),2),'r');
+			plot(tAxis,mean(stnMostAff(:,lowBetaMask),2),'g');
 			plot(tAxis,mean(stnMostAff(:,gammaMask),2),'b');
 			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			ylim([-3 3]);
 
 			subplot(nSubjects*2,2,4*(ii-1)+4,'NextPlot','add')
-			plot(tAxis,mean(stnLessAff(:,betaMask),2),'r');
+			plot(tAxis,mean(stnLessAff(:,highBetaMask),2),'r');
+			plot(tAxis,mean(stnLessAff(:,lowBetaMask),2),'g');
 			plot(tAxis,mean(stnLessAff(:,gammaMask),2),'b');
 			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
@@ -416,7 +410,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	end
 %	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
 %	annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
-
+%
 	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
 			'avgZScoreAcVsDCPhases.ps');
 
