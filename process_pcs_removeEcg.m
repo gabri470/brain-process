@@ -29,7 +29,7 @@ end
 function sProcess = GetDescription() %#ok<DEFNU>
     % Description the process
     sProcess.Comment     = '[PCS] Remove Ecg';
-    sProcess.FileTag     = '| ecg_pruned';
+    sProcess.FileTag     = 'ecg_pruned';
     sProcess.Category    = 'Filter';
     sProcess.SubGroup    = 'Pre-process';
     sProcess.Index       = 1000;
@@ -56,8 +56,8 @@ function sInputs = Run(sProcess, sInputs) %#ok<DEFNU>
 		for file = 1:numel(sInputs)
 
 				% check whether we have already detected the cardiac artefact
-				DataMat = in_bst(sInputs.FileName);
-				ChannelMat = in_bst_channel(sInputs.ChannelFile);
+				DataMat = in_bst(sInputs(file).FileName);
+				ChannelMat = in_bst_channel(sInputs(file).ChannelFile);
 				iChannels = channel_find(ChannelMat.Channel,'SEEG');
 
 				fs = round(1/mean(diff(DataMat.Time)));
@@ -69,19 +69,20 @@ function sInputs = Run(sProcess, sInputs) %#ok<DEFNU>
 
 				% compute cardiac samples 
 				evCardiacSamples = DataMat.Events(evCardiacIdx).samples - offset;
-				timeWnd= bsxfun(@plus,round(-.5*fs):round(.5*fs),evCardiacSamples')';
+				timeWnd= bsxfun(@plus,round(-.5*fs):(round(.5*fs)-1),evCardiacSamples')';
 
 				% reject events that are outside the analyses window
-				evCardiacMask = sum(timeWnd < 0,1)==0 & sum(timeWnd > max(size(sInputs.A)),1)==0; 
+				evCardiacMask = sum(timeWnd < 0,1)==0 & sum(timeWnd > max(size(sInputs(file).A)),1)==0; 
 				timeWnd = timeWnd(:,evCardiacMask);
 				evCardiacSamples = evCardiacSamples(evCardiacMask);
 
 
-				signals = sInputs.A(iChannels,timeWnd(:));
+				signals = sInputs(file).A(iChannels,timeWnd(:));
 				signals = reshape(signals',[size(timeWnd,1) numel(evCardiacSamples) 2]);
 				artefact = squeeze(mean(signals,2));
 
-
+                tk_win = tukeywin(size(timeWnd,1),0.2);
+                
 				timeWnd = timeWnd';
 
 				for iCh = 1:2 
@@ -93,13 +94,13 @@ function sInputs = Run(sProcess, sInputs) %#ok<DEFNU>
 						for ecgIdx = 1:numel(evCardiacSamples)
 
 								Amp = fminsearch(@(Amp)myminfun(Amp,lfpseg(ecgIdx,:)',...
-										tukeywin(length(meanlfpseg),0.2).*meanlfpseg),1);         
+										tk_win.*meanlfpseg),1);         
 
 								clfpsegAdapt(ecgIdx,:) = lfpseg(ecgIdx,:)'- ...
-										Amp*tukeywin(length(meanlfpseg),0.2).*meanlfpseg;
+										Amp*tk_win.*meanlfpseg;
 						end
 
-						sInputs.A(iChannels(iCh),timeWnd(:)) = clfpsegAdapt(:);
+						sInputs(file).A(iChannels(iCh),timeWnd(:)) = clfpsegAdapt(:);
 				end
 
 		end
