@@ -63,10 +63,9 @@ end
 function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 
     % Get inputs
-		DATA_FOLDER = '/media/lgabri/My Passport/gait-v2';
+		DATA_FOLDER = '/media/lgabri/My Passport/gait-2016';
 		subjectIdx = sInput.SubjectName;
 		conditionString = sInput.Condition;
-
 
 		sMat = in_bst_channel(sInput.ChannelFile);
 
@@ -75,57 +74,95 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 		dataMat = in_bst(sInput.FileName);
 
 		% define velocity data file
-		velocityFileName = fullfile(DATA_FOLDER,subjectIdx,strjoin({subjectIdx,'walking','off',...
-																trialIdx,sProcess.options.markerString.Value,'velocity.csv'},'_'));
+		if strfind(DATA_FOLDER,'gait-2016')
+				% check if required tdfReadData** is included in path
+				if isempty(which('tdfReadData2D'))
+						bst_report('Error',sProcess,sInput,'Missing required function tdfReadData2D')
+				end
+				velocityFileName = fullfile(DATA_FOLDER,subjectIdx,strjoin({subjectIdx,'walking','off',...
+																		 strcat(trialIdx,'.tdf')},'_'));
 
-		rawEventFileName = fullfile(DATA_FOLDER,subjectIdx,strjoin({subjectIdx,'walking','off',...
-																									'raw','events.csv'},'_'));
+				[Freq, ~, ~, ~, cinLabels, ~, tracks] = tdfReadData3D(velocityFileName);
 
-		% read data 
-		velocData = importdata(velocityFileName);
+				
+				cinLabels = mat2cell(cinLabels, ones(size(cinLabels,1),1), size(cinLabels,2));
+				cinLabels = cellfun(@deblank,cinLabels,'UniformOutput', false);
+				latMalMask= ~cellfun(@isempty,regexp(cinLabels,'LATMAL_'));
+				varOrder  = reshape(1:size(tracks,2),3,numel(cinLabels))';
 
-		% read events without TENS
-		rawEventData = importdata(rawEventFileName);
+				posData   = tracks(:,varOrder(latMalMask,:));
+				posData 	= reshape(posData,size(posData,1),2,3);
 
-		% get the joint order from variable/column names in velocData
-		markerNames = velocData.colheaders;
+				% select only X coordinates Antero-Posterio Direction
+				posData 	= squeeze(posData(:,:,1));
+
+				velocData = abs(-savitzkyGolayFilt(posData,3,1,11,[],1).*Freq);
+				markerNames = cinLabels(latMalMask);
+				rawOffsetInSeconds = 0;
+				referenceOffsetInSeconds = 0;
+
+				t = 0:1/Freq:size(tracks,1)/Freq-1/Freq;
+
+		else
+				referenceOffsetInSeconds = [];
+				% NOTE we keep the above lines for future reference.
+				velocityFileName = fullfile(DATA_FOLDER,subjectIdx,strjoin({subjectIdx,'walking','off',...
+																		trialIdx,sProcess.options.markerString.Value,'velocity.csv'},'_'));
+
+				rawEventFileName = fullfile(DATA_FOLDER,subjectIdx,strjoin({subjectIdx,'walking','off',...
+																											'raw','events.csv'},'_'));
+				% read data 
+				velocData = importdata(velocityFileName);
+
+				% read events without TENS
+				rawEventData = importdata(rawEventFileName);
+
+				% get the joint order from variable/column names in velocData
+				markerNames = velocData.colheaders;
+
+						
+				% extract the first event from all available which is 
+				% the first heel_contact_left defined in the raw
+				% time axis. This point will be used as reference point 
+				% in the sense that we compute event delay from the first
+				% detected heel contact
+				trialIdxRowInMat = str2double(regexp(trialIdx,'\d+','match'));
+
+				% get column names for raw events
+				if ~isfield(rawEventData,'colheaders')
+						error(' Something wrong with column names in raw events file');
+				else
+						rawEvMask = ~cellfun(@isempty,regexp(rawEventData.colheaders,'(heel|toe)'));
+				end
+
+				rawOffsetInSeconds = min(rawEventData.data(trialIdxRowInMat,rawEvMask));
+
+				t = velocData.data(:,1);
+				velocData = velocData.data(:,2:end);
+		end
 
 		% guess the feet order from variable names
 		leftMarkerIdx	  = ~cellfun(@isempty,regexp(markerNames, '_L'));
 		rightMarkerIdx	= ~cellfun(@isempty,regexp(markerNames, '_R'));
-			
-		% extract the first event from all available which is 
-		% the first heel_contact_left defined in the raw
-		% time axis. This point will be used as reference point 
-		% in the sense that we compute event delay from the first
-		% detected heel contact
-		trialIdxRowInMat = str2double(regexp(trialIdx,'\d+','match'));
-
-		% get column names for raw events
-		if ~isfield(rawEventData,'colheaders')
-				error(' Something wrong with column names in raw events file');
-		else
-				rawEvMask = ~cellfun(@isempty,regexp(rawEventData.colheaders,'(heel|toe)'));
-		end
-
-		rawOffsetInSeconds = min(rawEventData.data(trialIdxRowInMat,rawEvMask));
 
 		evGroupNames = {dataMat.Events.label};
 		gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
-
-		referenceOffsetInSeconds = min([dataMat.Events(gaitEventGroups).times]);
+		
+		if isempty(referenceOffsetInSeconds)
+			referenceOffsetInSeconds = min([dataMat.Events(gaitEventGroups).times]);
+	  end
 
 		thresholds = [1.5 1.5];
 			
 
 		% detect peak of the velocity
-		[~,lhLoc] = findpeaks(velocData.data(:,leftMarkerIdx),'MinPeakHeight',...
+		[~,lhLoc] = findpeaks(velocData(:,leftMarkerIdx),'MinPeakHeight',...
 															thresholds(1),'MinPeakDistance',10);
-		[~,rhLoc] = findpeaks(velocData.data(:,rightMarkerIdx),'MinPeakHeight',...
+		[~,rhLoc] = findpeaks(velocData(:,rightMarkerIdx),'MinPeakHeight',...
 															thresholds(2),'MinPeakDistance',10);
 
-		times1 = velocData.data(lhLoc,1)'-rawOffsetInSeconds+referenceOffsetInSeconds;
-		times2 = velocData.data(rhLoc,1)'-rawOffsetInSeconds+referenceOffsetInSeconds;
+		times1 = t(lhLoc)-rawOffsetInSeconds+referenceOffsetInSeconds;
+		times2 = t(rhLoc)-rawOffsetInSeconds+referenceOffsetInSeconds;
 
 		newEvent = struct('label',{'peakVeloc_L','peakVeloc_R'},...
 											'times',{times1,times2},...
@@ -137,9 +174,9 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 
 		dataMat.Events = [dataMat.Events, newEvent];
 
-		tibMask = ~cellfun(@isempty,regexp({sMat.Channel.Name},'(sol|[L|R]S_emg)'));
+		solMask = ~cellfun(@isempty,regexp({sMat.Channel.Name},'(sol|[L|R]S_emg)'));
 
-		figure, plot(dataMat.Time,dataMat.F(tibMask,:)), 
+		figure, plot(dataMat.Time,dataMat.F(solMask,:)), 
 				hold on, 
 
 		tmpEvents = [dataMat.Events(gaitEventGroups).times];
@@ -156,8 +193,7 @@ function sInput = Run(sProcess, sInput) %#ok<DEFNU>
 				[1 numel(peakRightEvents)]),'g--');
 
 
-		plot(velocData.data(:,1)-rawOffsetInSeconds+referenceOffsetInSeconds,...
-					velocData.data(:,2:end).*1e-1,'LineWidth',3)
+		plot(t,velocData.*1e-1,'LineWidth',3)
 
 
 		STUDY_DIR = bst_get('ProtocolInfo');
