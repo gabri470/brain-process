@@ -381,7 +381,13 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	
 	pvalue = zeros(numel(f),2);
 
-	for ii = 1:nSubjects
+	patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
+	[~,ord] = ismember(patientsOrder,subjectNameOrdered);
+
+	plotIdx = 1;
+	for ii = ord
+
+			fprintf('Statistcs on %s\n',subjectNameOrdered{ii});
 
 			[corrPvalue(:,1), pvalue(:,1)] = runPermutationTest(stnMeans{ii,1},...
 					stanceTcourse{ii,1},swingTcourse{ii,1},100);
@@ -398,14 +404,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 
 			% this is the STN- 
-%			subplot(nSubjects,4,4*(ii-1)+1)
-%			imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
-%			axis xy;
-%			set(gca,'XTickLabel',[]);
-%			xlim([min(tAxis) max(tAxis)]);
-%			ylim([6 80]);
+			annotation('textbox',[0.05, 0.85-(plotIdx-1)*0.1, 0.1, 0.05],...
+								'String',subjectNameOrdered{ii},'LineStyle','None');
 
-			subplot(nSubjects,2,2*(ii-1)+1,'NextPlot','add')
+			subplot(nSubjects,2,2*(plotIdx-1)+1,'NextPlot','add')
 			plot(f,squeeze( mean(stnMeans{ii,1},2)))
 			plot([0 0;90 90],[-3 3;-3 3],'k--');	
 			plot(f,unCorrSignificanceMask(:,1),'k.','MarkerSize',16);
@@ -413,20 +415,16 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			xlim([6 80]);
 			ylim([-5 5]);
 
-%			subplot(nSubjects,4,4*(ii-1)+3)
-%			imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
-%			axis xy;
-%			set(gca,'XTickLabel',[]);
-%			xlim([min(tAxis) max(tAxis)]);
-%			ylim([6 80]);
 
-			subplot(nSubjects,2,2*(ii-1)+2,'NextPlot','add')
+			
+			subplot(nSubjects,2,2*(plotIdx-1)+2,'NextPlot','add')
 			plot(f,squeeze(mean(stnMeans{ii,2},2)))
 			plot([0 0;90 90],[-3 3;-3 3],'k--');	
 			plot(f,unCorrSignificanceMask(:,2),'k.','MarkerSize',16);
 			plot(f,corrSignificanceMask(:,2),'r.','MarkerSize',16);
 			xlim([6 80]);
 			ylim([-5 5]);
+			plotIdx = plotIdx + 1;
 
 	end
 	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
@@ -467,7 +465,7 @@ function [corrPvalue,unCorrPvalue] = runPermutationTest(dataObs,stance,swing,nPe
 			% compute permutated statistics
 			dataPerm = bsxfun(@rdivide,...
 					bsxfun(@minus,dataStance,mean(dataSwing,2)),...
-					std(dataSwing,[],2));
+								std(dataSwing,[],2));
 
 			dataPerm = squeeze(mean(mean(dataPerm),2));
 

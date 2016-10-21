@@ -341,6 +341,28 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	% stnResults holds ERSD for each stride divide as STN-/+
 	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
 
+	stnMostAffMean = cat(1,stnMeans{:,1});
+	stnLessAffMean = cat(1,stnMeans{:,2});
+
+	ff = figure('papertype','a4','paperposition',[0 0 1 1],...
+							 'paperunits','normalized','paperorientation',...
+								'portrait','Visible','on');
+
+	subplot(2,1,1,'NextPlot','Add'),
+		imagesc(tAxis,f,squeeze(mean(stnMostAffMean))',zLimit);
+			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+			axis xy;
+			set(gca,'XTickLabel',[]);
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+			ylim([6 80]);
+	subplot(2,1,2,'NextPlot','Add')
+		imagesc(tAxis,f,squeeze(mean(stnLessAffMean))',zLimit);
+			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+			set(gca,'XTickLabel',[]);
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+			ylim([6 80]);
+
+
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
 							 'paperunits','normalized','paperorientation',...
 								'portrait','Visible','on');
@@ -349,20 +371,26 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	lowBetaMask = f >= 20 & f <= 35;
 	gammaMask  = f > 35 & f < 80;
 
-	for ii = 1:nSubjects
+	patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
+	[~,ord] = ismember(patientsOrder,subjectNameOrdered);
+
+	groupData = ones(8,numel(tAxis),3,2);
+	plotIdx = 1;
+	for ii = ord
 
 			stnMostAff = squeeze(stnMeans{ii,1});
 			stnLessAff = squeeze(stnMeans{ii,2});
 
-			subplot(nSubjects*2,2,4*(ii-1)+1,'NextPlot','add')
+			subplot(nSubjects*2,2,4*(plotIdx-1)+1,'NextPlot','add')
 			imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+			axis xy;
 			axis xy;
 			set(gca,'XTickLabel',[]);
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			ylim([6 80]);
 
-			subplot(nSubjects*2,2,4*(ii-1)+2,'NextPlot','add')
+			subplot(nSubjects*2,2,4*(plotIdx-1)+2,'NextPlot','add')
 		  imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
@@ -388,8 +416,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 %			axis xy;
 %			set(gca,'XTickLabel',[]);
 %			ylim([6 80]);
+			annotation('textbox',[0.05, 0.85-(plotIdx-1)*0.1, 0.1, 0.05],...
+								'String',subjectNameOrdered{ii},'LineStyle','None');
 
-			subplot(nSubjects*2,2,4*(ii-1)+3,'NextPlot','add')
+			subplot(nSubjects*2,2,4*(plotIdx-1)+3,'NextPlot','add')
 			plot(tAxis,mean(stnMostAff(:,highBetaMask),2),'r');
 			plot(tAxis,mean(stnMostAff(:,lowBetaMask),2),'g');
 			plot(tAxis,mean(stnMostAff(:,gammaMask),2),'b');
@@ -397,7 +427,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			ylim([-3 3]);
 
-			subplot(nSubjects*2,2,4*(ii-1)+4,'NextPlot','add')
+			subplot(nSubjects*2,2,4*(plotIdx-1)+4,'NextPlot','add')
 			plot(tAxis,mean(stnLessAff(:,highBetaMask),2),'r');
 			plot(tAxis,mean(stnLessAff(:,lowBetaMask),2),'g');
 			plot(tAxis,mean(stnLessAff(:,gammaMask),2),'b');
@@ -405,7 +435,16 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			ylim([-3 3]);
 
+			plotIdx = plotIdx + 1;
 
+			% groupData cointains single-subject mean time profiles
+			% for 3 frequency bands of interest
+			groupData(ii,:,1,1) = mean(stnMostAff(:,lowBetaMask),2);
+			groupData(ii,:,1,2) = mean(stnLessAff(:,lowBetaMask),2);
+			groupData(ii,:,2,1) = mean(stnMostAff(:,highBetaMask),2);
+			groupData(ii,:,2,2) = mean(stnLessAff(:,highBetaMask),2);
+			groupData(ii,:,3,1) = mean(stnMostAff(:,gammaMask),2);
+			groupData(ii,:,3,2) = mean(stnLessAff(:,gammaMask),2);
 
 	end
 %	annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
@@ -414,66 +453,91 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
 			'avgZScoreAcVsDCPhases.ps');
 
-	print(f2,'-dpsc',fname);
+%	print(f2,'-dpsc',fname);
 
+	grPval = nan(size(groupData,2),3,2);
+	for fIdx= 1:3
+			for stnIdx = 1:2
 
-
-
-	for ii = 1:nSubjects
-
-			[pvalue(1,:,:), unCorrPvalue(1,:,:)] = runPermutationTest(stnMeans{ii,1},...
-																					stnRawResults{ii,1},100,referenceStance);
-			[pvalue(2,:,:), unCorrPvalue(2,:,:)] = runPermutationTest(stnMeans{ii,2},...
-																					stnRawResults{ii,2},100,referenceStance);
-
-
-			statSignificance = ones(size(pvalue)).*0.3;
-			statSignificance(unCorrPvalue < 0.05) = 0.6;
-			statSignificance(pvalue < 0.05) = 1;
-
-
-			f2 = figure(2);
-			hold on
-			h = imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
-			box off
-			axis off
-
-			set(h,'AlphaData',squeeze(statSignificance(1,:,:))')
-			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-			axis xy;
-			set(gca,'XTickLabel',[]);
-			ylim([6 80]);
-
-			fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
-					strcat(subjectNameOrdered{ii},'_stn-_stat.png'));
-
-			print(f2,'-dpng','-r300',fname);
-
-			f3 = figure(3);
-			hold on
-			h = imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
-
-			box off
-			axis off
-			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
-			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-			axis xy;
-			set(gca,'XTickLabel',[]);
-			ylim([6 80]);
-
-			fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
-					strcat(subjectNameOrdered{ii},'_stn+_stat.png'));
-
-			print(f3,'-dpng','-r300',fname);
-
-			clearvars statSignificance pvalue unCorrPvalue
-			close(f2);
-			close(f3);
-
-
+					[~,p] = ttest(squeeze(groupData(:,:,fIdx,stnIdx)),0);
+					grPval(:,fIdx,stnIdx) = fdrCorrection(p,0.05);
+			end
 	end
+
+	grPval(grPval >= 0.05) = nan;
+	grPval(grPval < 0.05) = 1;
+
+	fn = figure,
+	subplot(2,1,1,'NextPlot','Add'),
+			plot(tAxis,squeeze(mean(groupData(:,:,:,1))));
+			plot(tAxis,squeeze(grPval(:,:,1)).*repmat([2 2.2 2.4],[numel(tAxis),1]),'.','MarkerSize',2);
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+	subplot(2,1,2,'NextPlot','Add'),
+			plot(tAxis,squeeze(mean(groupData(:,:,:,2))));
+			plot(tAxis,squeeze(grPval(:,:,2)).*repmat([2 2.2 2.4],[numel(tAxis),1]),'.','MarkerSize',2);
+			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%
+	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+			'grLvlAcVsDCPhases.ps');
+
+	print(fn,'-dpsc',fname);
+
+
+%	for ii = 1:nSubjects
+%
+%			[pvalue(1,:,:), unCorrPvalue(1,:,:)] = runPermutationTest(stnMeans{ii,1},...
+%																					stnRawResults{ii,1},100,referenceStance);
+%			[pvalue(2,:,:), unCorrPvalue(2,:,:)] = runPermutationTest(stnMeans{ii,2},...
+%																					stnRawResults{ii,2},100,referenceStance);
+%
+%
+%			statSignificance = ones(size(pvalue)).*0.3;
+%			statSignificance(unCorrPvalue < 0.05) = 0.6;
+%			statSignificance(pvalue < 0.05) = 1;
+%
+%
+%			f2 = figure(2);
+%			hold on
+%			h = imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
+%			box off
+%			axis off
+%
+%			set(h,'AlphaData',squeeze(statSignificance(1,:,:))')
+%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%			axis xy;
+%			set(gca,'XTickLabel',[]);
+%			ylim([6 80]);
+%
+%			fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+%					strcat(subjectNameOrdered{ii},'_stn-_stat.png'));
+%
+%			print(f2,'-dpng','-r300',fname);
+%
+%			f3 = figure(3);
+%			hold on
+%			h = imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
+%
+%			box off
+%			axis off
+%			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
+%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%			axis xy;
+%			set(gca,'XTickLabel',[]);
+%			ylim([6 80]);
+%
+%			fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+%					strcat(subjectNameOrdered{ii},'_stn+_stat.png'));
+%
+%			print(f3,'-dpng','-r300',fname);
+%
+%			clearvars statSignificance pvalue unCorrPvalue
+%			close(f2);
+%			close(f3);
+%
+%
+%	end
 end % function
 
 function [pvalue, unCorrpvalue] = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStance)
@@ -530,18 +594,5 @@ function pvalue = fdrCorrection(pvalue, alpha)
 	FDR 				= alpha.*(1:N)./N;
 	thr 				= FDR(find(tmpPvalue <= FDR',1,'last'));
 	pvalue(pvalue >= thr) = 1;
-%	K 					= N*alpha;
-%	ttmpPvalue	= sort(tmpPvalue(tmpPvalue < alpha));
-%
-%	if( numel(ttmpPvalue) > K)
-%			b	= ttmpPvalue(end-K:end);
-%
-%			loc = arrayfun(@(x) find( tmpPvalue == x ), unique(b),'uni',false);
-%			loc = cat(1,loc{:});
-%			tmpPvalue(loc) = 1;
-%			pvalue = reshape(tmpPvalue,size(pvalue));
-%	else
-%			pvalue = ones(size(pvalue));
-%	end
-%	
+
 end
