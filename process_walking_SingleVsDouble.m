@@ -317,35 +317,33 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	end % for sInputs files
 
 	% stnResults holds ERSD for each stride divide as STN-/+
-	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
+%	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
+%
+%
+%	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
+%
+%	stnMostAffMean = cat(1,stnMeans{:,1});
+%	stnLessAffMean = cat(1,stnMeans{:,2});
+%
+%	ff = figure('papertype','a4','paperposition',[0 0 1 1],...
+%							 'paperunits','normalized','paperorientation',...
+%								'portrait','Visible','on');
+%
+%	subplot(2,1,1,'NextPlot','Add'),
+%		imagesc(tAxis,f,squeeze(mean(stnMostAffMean))',zLimit);
+%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+%			axis xy;
+%			set(gca,'XTickLabel',[]);
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%			ylim([6 80]);
+%	subplot(2,1,2,'NextPlot','Add')
+%		imagesc(tAxis,f,squeeze(mean(stnLessAffMean))',zLimit);
+%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+%			set(gca,'XTickLabel',[]);
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%			ylim([6 80]);
 
 
-	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
-
-	stnMostAffMean = cat(1,stnMeans{:,1});
-	stnLessAffMean = cat(1,stnMeans{:,2});
-
-	ff = figure('papertype','a4','paperposition',[0 0 1 1],...
-							 'paperunits','normalized','paperorientation',...
-								'portrait','Visible','on');
-
-	subplot(2,1,1,'NextPlot','Add'),
-		imagesc(tAxis,f,squeeze(mean(stnMostAffMean))',zLimit);
-			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
-			axis xy;
-			set(gca,'XTickLabel',[]);
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-			ylim([6 80]);
-	subplot(2,1,2,'NextPlot','Add')
-		imagesc(tAxis,f,squeeze(mean(stnLessAffMean))',zLimit);
-			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
-			set(gca,'XTickLabel',[]);
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-			ylim([6 80]);
-
-	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
-							 'paperunits','normalized','paperorientation',...
-								'portrait','Visible','on');
 
 	highBetaMask = f >= 6 & f <= 19;
 	lowBetaMask = f >= 20 & f <= 35;
@@ -357,92 +355,126 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	plotIdx = 1;
 
 	groupData = ones(8,numel(tAxis),3,2);
+
 	for ii = ord
+			f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
+							 'paperunits','normalized','paperorientation',...
+								'portrait','Visible','on');
+			stnMostAff = stnRawResults{ii,1};
+			stnLessAff = stnRawResults{ii,2};
 
-			stnMostAff = squeeze(stnMeans{ii,1});
-			stnLessAff = squeeze(stnMeans{ii,2});
+			plotIdx = 1;
+			nSubjects = 1;
 
-			subplot(nSubjects*2,2,4*(ii-1)+1,'NextPlot','add')
-			imagesc(tAxis,f,squeeze(stnMeans{ii,1})',zLimit);
+			stnMostAffERSD = computeERSD(stnMostAff,referenceStance,1);
+			stnLessAffERSD = computeERSD(stnLessAff,referenceStance,1);
+
+			[pvalue(1,:,:), unCorrPvalue(1,:,:)] = ...
+												runPermutationTest(stnMostAffERSD,...
+															stnMostAff,100,referenceStance);
+			[pvalue(2,:,:), unCorrPvalue(2,:,:)] = ...
+												runPermutationTest(stnLessAffERSD,...
+															stnLessAff,100,referenceStance);
+
+
+			statSignificance = ones(size(pvalue)).*0;
+			statSignificance(unCorrPvalue < 0.05) = 0.6;
+			statSignificance(pvalue < 0.05) = 1;
+
+
+
+				subplot(nSubjects*2,2,4*(plotIdx-1)+1,'NextPlot','add')
+
+			h = imagesc(tAxis,f,(stnMostAffERSD.*squeeze(statSignificance(1,:,:)))');
+%			set(h,'AlphaData',squeeze(statSignificance(1,:,:))')
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+			axis xy;
 			axis xy;
 			set(gca,'XTickLabel',[]);
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			ylim([6 80]);
 
-			subplot(nSubjects*2,2,4*(ii-1)+2,'NextPlot','add')
-		  imagesc(tAxis,f,squeeze(stnMeans{ii,2})',zLimit);
+
+			subplot(nSubjects*2,2,4*(plotIdx-1)+2,'NextPlot','add')
+		  h = imagesc(tAxis,f,(stnLessAffERSD.*squeeze(statSignificance(2,:,:)))');
+%			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
 			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
 			axis xy;
 			set(gca,'XTickLabel',[]);
 			ylim([6 80]);
 
+			% this is the STN- 
 			annotation('textbox',[0.05, 0.85-(plotIdx-1)*0.1, 0.1, 0.05],...
 								'String',subjectNameOrdered{ii},'LineStyle','None');
 
-			subplot(nSubjects*2,2,4*(ii-1)+3,'NextPlot','add')
-			plot(tAxis,mean(stnMostAff(:,lowBetaMask),2),'r');
-			plot(tAxis,mean(stnMostAff(:,highBetaMask),2),'g');
-			plot(tAxis,mean(stnMostAff(:,gammaMask),2),'b');
-			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
+			subplot(nSubjects*2,2,4*(plotIdx-1)+3,'NextPlot','add')
+			plot(tAxis,mean(stnMostAffERSD(:,highBetaMask),2),'r');
+			plot(tAxis,mean(stnMostAffERSD(:,lowBetaMask),2),'g');
+			plot(tAxis,mean(stnMostAffERSD(:,gammaMask),2),'b');
+%			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-			ylim([-3 3]);
 
-			subplot(nSubjects*2,2,4*(ii-1)+4,'NextPlot','add')
-			plot(tAxis,mean(stnLessAff(:,lowBetaMask),2),'r');
-			plot(tAxis,mean(stnLessAff(:,highBetaMask),2),'g');
-			plot(tAxis,mean(stnLessAff(:,gammaMask),2),'b');
-			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
+			subplot(nSubjects*2,2,4*(plotIdx-1)+4,'NextPlot','add')
+			plot(tAxis,mean(stnLessAffERSD(:,highBetaMask),2),'r');
+			plot(tAxis,mean(stnLessAffERSD(:,lowBetaMask),2),'g');
+			plot(tAxis,mean(stnLessAffERSD(:,gammaMask),2),'b');
+%			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
 			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-			ylim([-3 3]);
 
+
+			plotIdx = plotIdx + 1;
 
 			% groupData cointains single-subject mean time profiles
 			% for 3 frequency bands of interest
-			groupData(ii,:,1,1) = mean(stnMostAff(:,lowBetaMask),2);
-			groupData(ii,:,1,2) = mean(stnLessAff(:,lowBetaMask),2);
-			groupData(ii,:,2,1) = mean(stnMostAff(:,highBetaMask),2);
-			groupData(ii,:,2,2) = mean(stnLessAff(:,highBetaMask),2);
-			groupData(ii,:,3,1) = mean(stnMostAff(:,gammaMask),2);
-			groupData(ii,:,3,2) = mean(stnLessAff(:,gammaMask),2);
-			
-			plotIdx = plotIdx + 1;
+%			groupData(ii,:,1,1) = mean(stnMostAff(:,lowBetaMask),2);
+%			groupData(ii,:,1,2) = mean(stnLessAff(:,lowBetaMask),2);
+%			groupData(ii,:,2,1) = mean(stnMostAff(:,highBetaMask),2);
+%			groupData(ii,:,2,2) = mean(stnLessAff(:,highBetaMask),2);
+%			groupData(ii,:,3,1) = mean(stnMostAff(:,gammaMask),2);
+%			groupData(ii,:,3,2) = mean(stnLessAff(:,gammaMask),2);
+%			
+%			plotIdx = plotIdx + 1;
+%
+%
+			fname = fullfile(getenv('HOME'),'Dropbox','Isaias_group',...
+					'walking','figs',strcat(subjectNameOrdered{ii},'_avgZScoreSinVsDouble.png'));
 
 
 
+			print(f2, '-dpng',fname);
 
 	end
 
 	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
 			'avgZScoreSinVsDouble.ps');
 
-	grPval = nan(size(groupData,2),3,2);
-	for fIdx= 1:3
-			for stnIdx = 1:2
-
-					[~,p] = ttest(squeeze(groupData(:,:,fIdx,stnIdx)),0);
-					grPval(:,fIdx,stnIdx) = fdrCorrection(p,0.05);
-			end
-	end
-
-	grPval(grPval >= 0.05) = nan;
-	grPval(grPval < 0.05) = 1;
-
-	fn = figure;
-	subplot(2,1,1,'NextPlot','Add'),
-			plot(tAxis,squeeze(mean(groupData(:,:,:,1))));
-			plot(tAxis,squeeze(grPval(:,:,1)).*repmat([2 2.2 2.4],[numel(tAxis),1]),'.','MarkerSize',3);
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-	subplot(2,1,2,'NextPlot','Add'),
-			plot(tAxis,squeeze(mean(groupData(:,:,:,2))));
-			plot(tAxis,squeeze(grPval(:,:,2)).*repmat([2 2.2 2.4],[numel(tAxis),1]),'.','MarkerSize',3);
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-
-	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
-			'grLvlZScoreSinVsDouble.ps');
-
-	print(fn,'-dpsc',fname);
+%	grPval = nan(size(groupData,2),3,2);
+%	for fIdx= 1:3
+%			for stnIdx = 1:2
+%
+%					[~,p] = ttest(squeeze(groupData(:,:,fIdx,stnIdx)),0);
+%					grPval(:,fIdx,stnIdx) = fdrCorrection(p,0.05);
+%			end
+%	end
+%
+%	grPval(grPval >= 0.05) = nan;
+%	grPval(grPval < 0.05) = 1;
+%
+%	fn = figure;
+%	subplot(2,1,1,'NextPlot','Add'),
+%			plot(tAxis,squeeze(mean(groupData(:,:,:,1))));
+%			plot(tAxis,squeeze(grPval(:,:,1)).*repmat([2 2.2 2.4],[numel(tAxis),1]),'.','MarkerSize',3);
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%	subplot(2,1,2,'NextPlot','Add'),
+%			plot(tAxis,squeeze(mean(groupData(:,:,:,2))));
+%			plot(tAxis,squeeze(grPval(:,:,2)).*repmat([2 2.2 2.4],[numel(tAxis),1]),'.','MarkerSize',3);
+%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+%
+%	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+%			'grLvlZScoreSinVsDouble.ps');
+%
+%	print(fn,'-dpsc',fname);
 	%	print(f2,'-dpsc',fname);
 
 %	for ii = 1:nSubjects
@@ -500,14 +532,14 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 %	end
 end % function
 
-function [pvalue, unCorrpvalue] = runPermutationTest(dataObs,dataRaw,nPermutation,referenceStance)
+function [pvalue, unCorrpvalue] = runPermutationTest(obsERSD,stnData,nPermutation,referenceStance)
 %RUNPERMUTATIONTEST Description
 %	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
 %
-		pvalue  	= zeros(1,800,84);
-		nSwing  	= size(dataRaw,1);
+		pvalue  	= zeros(800,84);
+		nSwing  	= size(stnData,1);
 
-		dataPerm	= dataRaw;
+		dataPerm  = stnData;
 
 		% we perform a permutation test for each STN separatelly
 		for permIdx = 1:nPermutation
@@ -516,26 +548,22 @@ function [pvalue, unCorrpvalue] = runPermutationTest(dataObs,dataRaw,nPermutatio
 			% and rotate them
 			for swingIdx = 1:nSwing
 
-				dataPerm(swingIdx,:,:) = randCircShift(dataRaw(swingIdx,:,:)); 
+				dataPerm(swingIdx,:,:) = randCircShift(stnData(swingIdx,:,:)); 
 
 			end
 			
 			% compute permutated statistics
-			dataPerm = bsxfun(@rdivide,bsxfun(@minus,dataPerm,...
-									mean(dataPerm(:,referenceStance(2):referenceStance(3),:),2)),...
-									 std(dataPerm(:,referenceStance(2):referenceStance(3),:),[],2));
-
-			% average across swing
-			dataPerm = mean(dataPerm);
-
+			permERSD = computeERSD(dataPerm,referenceStance,2);
+				
 			% compute pvalues for all frequencies and all time points.
-			pvalue = pvalue + double(dataPerm > dataObs)./nPermutation;
+			pvalue = pvalue + double(permERSD > obsERSD)./nPermutation;
 
 		end
 		unCorrpvalue = pvalue;
 		pvalue = fdrCorrection(pvalue,0.05);
 
 end
+
 
 function A = randCircShift(A)
 
@@ -554,5 +582,32 @@ function pvalue = fdrCorrection(pvalue, alpha)
 	FDR 				= alpha.*(1:N)./N;
 	thr 				= FDR(find(tmpPvalue <= FDR',1,'last'));
 	pvalue(pvalue >= thr) = 1;
+
+end
+function stnResult = computeERSD(stnData,referenceStance,method)
+%	 COMPUTEERSD of a single STN for a single subject
+%
+
+% stnData contains each trial morphed in the 
+% => stnData [ n x time x freq ]
+
+% compute the normlization factor concatenating all baseline 
+% and computing the mean across trials
+	[n,~,f] = size(stnData);
+	tBaseline = referenceStance(2):referenceStance(3);
+	t = numel(tBaseline);
+	
+	numFactor = mean(mean(stnData(:,tBaseline,:),1));
+	denFactor = std(reshape(stnData(:,tBaseline,:),[n*t,f]));
+
+	if method
+		% rel change
+		stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),numFactor);
+	else
+		% pseudo-zscore
+		stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),denFactor);
+	end
+
+	stnResult = squeeze(mean(stnResult));
 
 end

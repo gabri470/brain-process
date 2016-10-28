@@ -202,13 +202,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					end
 
 
-					% if the stride contains bad steps 
-					% we skip it and continue to the next
-					if ismember(plotIdx,strideRej)
-							plotIdx = plotIdx + 1;
-							continue;
-					end
-
 					try
 							
 							footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
@@ -300,6 +293,9 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					% end up having a time-warped data with fixed stride lengths
 					% or individual stride lenghts with their original data
 					% thus we need to account for different sizes
+					%
+					
+					stnRawData{subjectIdx,stnIdx} = cat(1,stnRawData{subjectIdx,stnIdx},finalTF);
 
 					if sProcess.options.normalizeOnStride.Value
 							normFactor 	= repmat(mean(finalTF,2),[1 numel(timeWindow) 1]);
