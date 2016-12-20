@@ -28,7 +28,7 @@ function varargout = process_resample_new( varargin )
 %
 % Authors: Francois Tadel, 2010-2013
 
-macro_methodcall;
+eval(macro_method);
 end
 
 

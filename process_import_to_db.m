@@ -29,7 +29,7 @@ function varargout = process_import_to_db( varargin )
 %
 % Authors: Francois Tadel, 2010-2013
 
-macro_methodcall;
+eval(macro_method);
 end
 
 

@@ -21,7 +21,7 @@ function varargout = process_extract_time_raw( varargin )
 %
 % Authors: Francois Tadel, 2010-2013
 
-macro_methodcall;
+eval(macro_method);
 end
 
 

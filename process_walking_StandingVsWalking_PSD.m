@@ -1,4 +1,4 @@
-function varargout = process_walking_RestingVsStanding( varargin )
+function varargout = process_walking_StandingVsWalking_PSD( varargin )
 % PROCESS_EXAMPLE_CUSTOMAVG: Example file that reads all the data files in input, and saves the average.
 
 % @=============================================================================
@@ -27,14 +27,14 @@ end
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
     % Description the process
-    sProcess.Comment     = 'Resting Vs Standing';
+    sProcess.Comment     = 'Standing vs Walking';
     sProcess.FileTag     = '__';
     sProcess.Category    = 'Custom';
     sProcess.SubGroup    = 'Walking';
     sProcess.Index       = 801;
     % Definition of the input accepted by this process
-    sProcess.InputTypes  = {'timefreq'};
-    sProcess.OutputTypes = {'timefreq'};
+    sProcess.InputTypes  = {'data'};
+    sProcess.OutputTypes = {'data'};
     sProcess.nInputs     = 1;
     sProcess.nMinFiles   = 1;
 
@@ -65,67 +65,85 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	% we need to find files that have to be processed and group 
 	% them for subjects and conditions
 	% First group all sInput.Comment together
-	conditionStrings = {sInputs.Comment};
+	conditionStrings = {sInputs.Condition};
 	
 	standingConMask = ~cellfun(@isempty,regexp(conditionStrings,'(s|S)tanding'));
+	walkingConMask = ~cellfun(@isempty,regexp(conditionStrings,'(w|W)alking'));
 	restingConMask = ~cellfun(@isempty,regexp(conditionStrings,'(r|R)esting'));
 
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
 							 'paperunits','normalized','paperorientation',...
 								'portrait','Visible','on');
-
+	f = 1:60;
 
 	OutputFiles = {};
 
 	for subjIdx = 1:nSubjects
 			% for each subject separately we pick standing condition
-			subjectMask = ~cellfun(@isempty,regexp({sInputs.SubjectName},subjectNames{subjIdx}));
+			subjectMask 		= ~cellfun(@isempty,regexp({sInputs.SubjectName},subjectNames{subjIdx}));
 
 			standingFileIdx = find(subjectMask & standingConMask);
-			restingFileIdx = find(subjectMask & restingConMask);
+			walkingFileIdx 	= find(subjectMask & walkingConMask);
+			restingFileIdx 	= find(subjectMask & restingConMask);
 
 			% read standing time-freq data
-			standingStruct 	= in_bst_timefreq(sInputs(standingFileIdx).FileName);
-			parentStruct 		= bst_process('GetInputStruct',standingStruct.DataFile);
-			standChannels 	= in_bst_channel(parentStruct.ChannelFile);
+			standingStruct 	= in_bst_data(sInputs(standingFileIdx).FileName);
+			standChannels 	= in_bst_channel(sInputs(standingFileIdx).ChannelFile);
 			standiChannels	= channel_find( standChannels.Channel,'SEEG');
 
-			restingStruct 	= in_bst_timefreq(sInputs(restingFileIdx).FileName);
-			parentStruct 		= bst_process('GetInputStruct',restingStruct.DataFile);
-			restChannels 		= in_bst_channel(parentStruct.ChannelFile);
-			restiChannels		= channel_find( standChannels.Channel,'SEEG');
+			standSpectrum   = computeSpectrum( sInputs(standingFileIdx).FileName,standChannels,standiChannels);
 
-			standingPsd 		= squeeze(mean(standingStruct.TF(standiChannels,:,:),2));
-			restingPsd			= squeeze(mean(restingStruct.TF(restiChannels,:,:),2));
+			% read resting time-freq data
+			restingStruct 	= in_bst_data(sInputs(restingFileIdx).FileName);
+			restChannels 		= in_bst_channel(sInputs(restingFileIdx).ChannelFile);
+			restiChannels		= channel_find( restChannels.Channel,'SEEG');
 
-%			relChange				= bsxfun(@rdivide,bsxfun(@minus,standingPsd,mean(restingPsd)),mean(restingPsd));
-			relChange 			= (restingPsd - standingPsd)./standingPsd;
-			
-			% sort rows (ie. channels) to match STN- / STN+ order
-			% that is fixed thorought the paper/analyses
-			if(strcmp(mostAffSides(subjIdx),'L'))
-					relChange = relChange([2 1],:);
-			end
+			restSpectrum 		= computeSpectrum( sInputs(restingFileIdx).FileName, restChannels, restiChannels);
 
-			subplot(nSubjects,2,2*(subjIdx-1)+1,'NextPlot','add')
-			plot(1:90,relChange(1,:),'r')
-%			plot(1:90,significanceMask(1,:),'r.','MarkerSize',10);%,'EdgeColor',[1 0 0]);
+			walkSpectrum 		= nan(numel(f),numel(walkingFileIdx));
 
-			plot(1:90,relChange(2,:),'c')
-%			plot(1:90, significanceMask(2,:),'c.','MarkerSize',10);%,'EdgeColor',[1 0 0]);
-			xlim([6 40]);
-%			ylim([-1 4]);
+			for walkIdx = 1:numel(walkingFileIdx)
 
-			restingPsd = bsxfun(@rdivide,restingPsd,sum(restingPsd,2));
-			standingPsd = bsxfun(@rdivide,standingPsd,sum(standingPsd,2));
+					walkingStruct = in_bst_data(sInputs(walkingFileIdx(walkIdx)).FileName);
+					walkChannels 	= in_bst_channel(sInputs(walkingFileIdx(walkIdx)).ChannelFile);
+					walkiChannels	= channel_find(walkChannels.Channel,'SEEG');
+		
+					% filter cardiac and peakVelocity events from gait-related events
+					evGroupNames = {walkingStruct.Events.label};
+					gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel)'));
 
-			subplot(nSubjects,2,2*(subjIdx-1)+2,'NextPlot','add')
-			plot(1:90,restingPsd(1,:),'r'),
-			plot(1:90,standingPsd(1,:),'r--');
-			plot(1:90,restingPsd(2,:),'c'),
-			plot(1:90,standingPsd(2,:),'c--');
-			xlim([6 40]);
+					Fs = 1/mean(diff(walkingStruct.Time));
 
+					% concat all heel contact events in order to have
+					% a vector of latencies of this form: e.g.
+					% hc_L *tof_R hc_R *tof_L hc_L *tof_R hc_R *tof_L hc_L *tof_R
+					eventSamples = sort([walkingStruct.Events(gaitEventGroups).samples]);
+
+					% we have to correct the event adding the offset
+					% since they are referred to the 0 of the raw data 
+					evOffset 			= round(walkingStruct.Time(1)*Fs);
+					eventSamples  = eventSamples - evOffset;
+
+					% analysis window is from the first heel contact to the last heel contact
+					timeWindow 		= eventSamples(1):eventSamples(end);
+
+					% we then pack trails together in order to have a matrix 2 x walkingRefLength x f x trials
+					% that we will rotate to match the form 2 x windows x walkingRefLength x f as 
+					% standing condition data are represented in
+					walkSpectrum(:,walkIdx) = computeSpectrum(sInputs(walkingFileIdx(walkIdx)).FileName,...
+																										walkChannels,walkiChannels,timeWindow);
+
+
+		  end % walking trial loop
+
+
+			subplot(2,4,subjIdx,'NextPlot','add')
+			plot(f,restSpectrum,'LineWidth',2);
+			plot(f,standSpectrum,'LineWidth',2);
+			plot(f,mean(walkSpectrum,2),'LineWidth',2);	
+			xlim([6 60]);
+			ylim([0 12]);
+			title(subjectNames(subjIdx));
 
 	end % subject loop
 	clearvars walkData standData
@@ -173,3 +191,41 @@ function pvalue = fdrCorrection(pvalue, alpha)
 	pvalue(pvalue >= thr) = 1;
 
 end
+function crossSpectrum = computeSpectrum(filename,channelData,iChannels,timeWindow)
+% Description
+%	CROSSSPECTRUM = () Long description
+%
+%
+
+	[ftData, DataMat, ChannelMat] = out_fieldtrip_data( filename );
+
+	if nargin < 4
+			timeWindow = ftData.time;
+	end
+	tapNW						= 2;
+	f 							= 1:60;
+	chancomb 				= [{channelData.Channel(iChannels).Name}];
+    
+  Fs = 1/mean(diff(ftData.time{1}));
+
+	cfg 						= [];
+	cfg.output 			='powandcsd';
+	cfg.taper 			= 'dpss';
+	cfg.channel 		= {channelData.Channel(iChannels).Name};
+	cfg.channelcmb 	= chancomb;
+	cfg.method  		= 'mtmfft';
+	cfg.foi 				= 1:60;
+	cfg.pad 				= 'nextpow2';
+	cfg.tapsmofrq 	= tapNW*Fs/length(ftData.time{1});
+	% CrossSpectrum.powspctr tr x 2 x f  
+	% 						 .crssspctr tr x 1 x f 
+	% complex values
+	[CrossSpectrum] = ft_freqanalysis(cfg, ftData);
+
+	normBand 				= f >= 7 & f<= 60;
+	normFactor			= mean(abs(CrossSpectrum.crsspctrm(1,normBand)),2);
+	crossSpectrum   = abs(CrossSpectrum.crsspctrm)./repmat(normFactor,[1 numel(f)]);
+
+end
+
+

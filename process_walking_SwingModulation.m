@@ -20,7 +20,7 @@ function varargout = process_walking_SwingModulation( varargin )
 % =============================================================================@
 %
 varargout = {};
-macro_methodcall;
+eval(macro_method);
 end
 
 

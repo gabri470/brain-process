@@ -24,7 +24,7 @@ function varargout = process_addPeakVelocEvents( varargin )
 %
 % Authors: Gabriele Arnulfo
 %
-macro_methodcall;
+eval(macro_method);
 end
 
 

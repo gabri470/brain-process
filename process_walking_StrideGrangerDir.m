@@ -1,4 +1,4 @@
-function varargout = process_walking_StrideAnalyses( varargin )
+function varargout = process_walking_StrideGrangerDir( varargin )
 % PROCESS_EXAMPLE_CUSTOMAVG: Example file that reads all the data files in input, and saves the average.
 
 % @=============================================================================
@@ -27,7 +27,7 @@ end
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
     % Description the process
-    sProcess.Comment     = 'Stride Modulation';
+    sProcess.Comment     = 'Stride Granger';
     sProcess.FileTag     = '__';
     sProcess.Category    = 'Custom';
     sProcess.SubGroup    = 'Walking';
@@ -41,19 +41,19 @@ function sProcess = GetDescription() %#ok<DEFNU>
 
     % Definition of the options
 		% Sensor types
-		sProcess.options.sensortypes.Comment = 'Sensor types or names: ';
-		sProcess.options.sensortypes.Type    = 'text';
-		sProcess.options.sensortypes.Value   = 'SEEG';
-		sProcess.options.doWarping.Comment   = 'time warping ';
-		sProcess.options.doWarping.Type      = 'checkbox';
-		sProcess.options.doWarping.Value     = true;
-		sProcess.options.saveOutput.Comment  = 'Save output to brainstormDB';
-		sProcess.options.saveOutput.Type     = 'checkbox';
-		sProcess.options.saveOutput.Value    = false;
-		sProcess.options.normOnStride.Comment= 'Normalize on Stride';
-		sProcess.options.normOnStride.Type   = 'checkbox';
-		sProcess.options.normOnStride.Value  = false';
-	
+%		sProcess.options.sensortypes.Comment = 'Sensor types or names: ';
+%		sProcess.options.sensortypes.Type    = 'text';
+%		sProcess.options.sensortypes.Value   = 'SEEG';
+%		sProcess.options.doWarping.Comment   = 'time warping ';
+%		sProcess.options.doWarping.Type      = 'checkbox';
+%		sProcess.options.doWarping.Value     = true;
+%		sProcess.options.saveOutput.Comment  = 'Save output to brainstormDB';
+%		sProcess.options.saveOutput.Type     = 'checkbox';
+%		sProcess.options.saveOutput.Value    = false;
+%		sProcess.options.normOnStride.Comment= 'Normalize on Stride';
+%		sProcess.options.normOnStride.Type   = 'checkbox';
+%		sProcess.options.normOnStride.Value  = false';
+%	
 
 end
 
@@ -290,7 +290,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					if strcmp(footLabel,'L')
 							% left foot swing => central hc_L
 							%  => stnContra is rightSTN == idx 1
-							controLatIdx = 1;
+%							controLatIdx = 1;
+							stnOrder = [1 2];
 							if strcmp(mostAffSide,'L')
 								% if STN- is L => this swing is relative to 
 								% STN+ => plot on right side of page
@@ -302,7 +303,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 							end
 					else 
 							% right foot swing
-							controLatIdx = 2;
+%							controLatIdx = 2;
+							stnOrder = [2 1];
 							if strcmp(mostAffSide,'L')
 								% if STN- is R => this swing is relative
 								% to STN- => plot on left side of page
@@ -317,32 +319,14 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 					stridePhaseDur{subjectIdx,stnIdx} = ...
 							cat(1,stridePhaseDur{subjectIdx,stnIdx},...
 																diff(originalVector));
-					% we save for each subject the time-warped ERSD normalized over***
+					% we save for each subject the time-frequency data
+					% in the way that stnIdx = 1 contains STN- controlateral strides
+					% and stnIdx = 2 the strides controlateral to STN+
+					% the resuling matrices for a given cell will be 
+					% of 2 x T x f x Trials
 					stnRawResults{subjectIdx,stnIdx} = ...
 							cat(1,stnRawResults{subjectIdx,stnIdx},...
-																finalTF(controLatIdx,:,:));
-
-					stnData{subjectIdx,stnIdx} = ...
-							cat(1,stnData{subjectIdx,stnIdx},...
-																finalRaw(controLatIdx,:));
-
-
-
-%					if(~sProcess.options.normOnStride.Value)
-%%							finalTF = bsxfun(@rdivide,bsxfun(@minus,finalTF,...
-%%									mean(finalTF(:,referenceStance(2):referenceStance(4),:),2)),...
-%%									std(finalTF(:,referenceStance(2):referenceStance(4),:),[],2));
-%									
-%							finalTF = bsxfun(@minus,finalTF,...
-%									mean(finalTF(:,referenceStance(2):referenceStance(4),:),2));
-%					end
-%
-%					stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
-%																								finalTF(controLatIdx,:,:));
-
-
-%					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
-%					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
+																finalTF(stnOrder,:,:));
 
 					plotIdx = plotIdx + 1;
 					clear finalTF;
@@ -353,54 +337,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 	end % for sInputs files
 
-	% stnResults holds ERSD for each stride divide as STN-/+
-%	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
-%	stnRawMeans = cellfun(@mean,stnRawResults,'UniformOutput',false);
-%
-%
-%	for subj = 1:nSubjects
-%
-%			% tmp 2 x 1000 x 84
-%			rawData = cat(1,stnRawMeans{subj,:});
-%%			refData = cat(1,stnMeans{subj,:});
-%			
-%			normFactor = mean(rawData(:,referenceStance(2):referenceStance(3),:),2);
-%			rawData = bsxfun(@rdivide,bsxfun(@minus,rawData,...
-%									normFactor),normFactor);
-%
-%			stnMeans{subj,1} = rawData(1,:,:);
-%			stnMeans{subj,2} = rawData(2,:,:);
-%
-%	end
-%
-%
-%	% stnMeans contains the mean across strides for STN-/+ 
-%	% for each subject
-%	% stnMostAffMean (subject x f x t)
-%	stnMostAffMean = cat(1,stnMeans{:,1});
-%	stnLessAffMean = cat(1,stnMeans{:,2});
-%
-%
-%	ff = figure('papertype','a4','paperposition',[0 0 1 1],...
-%							 'paperunits','normalized','paperorientation',...
-%								'portrait','Visible','on');
-%
-%	subplot(2,1,1,'NextPlot','Add'),
-%		imagesc(tAxis,f,squeeze(mean(stnMostAffMean,1))');%,zLimit);
-%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
-%			axis xy;
-%			set(gca,'XTickLabel',[]);
-%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-%			ylim([6 80]);
-%
-%	subplot(2,1,2,'NextPlot','Add')
-%		imagesc(tAxis,f,squeeze(mean(stnLessAffMean,1))');%,zLimit);
-%			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
-%			set(gca,'XTickLabel',[]);
-%			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-%			ylim([6 80]);
-%
-%
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
 							 'paperunits','normalized','paperorientation',...
 								'portrait','Visible','on');
@@ -417,28 +353,25 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	plotIdx = 1;
 
 	for ii = ord
-%			f3 = figure('papertype','a4','paperposition',[0 0 1 1],...
-%							 'paperunits','normalized','paperorientation',...
-%								'portrait','Visible','on');
-%			colormap([1 1 1; 1 1 1; jet(256)]);
-			
-			stnMostAff = stnRawResults{ii,1};
-			stnLessAff = stnRawResults{ii,2};
 
-			stnMostAffERSD = computeERSD(stnMostAff,referenceStance,1);
-			stnLessAffERSD = computeERSD(stnLessAff,referenceStance,1);
+			% for a given subjects we should first compute the Wavelet cross coupling matrix
+			dataStnMostContra = stnRawResults{ii,1};
 
-			[pvalue(1,:,:), unCorrPvalue(1,:,:)] = ...
-												runPermutationTest(stnMostAffERSD,...
-															stnMostAff,100,referenceStance);
-			[pvalue(2,:,:), unCorrPvalue(2,:,:)] = ...
-												runPermutationTest(stnLessAffERSD,...
-															stnLessAff,100,referenceStance);
+			WS(1,2,:,:) = mean(dataStnMostContra(1,:,:,:)*conj(dataStnMostContra(2,:,:,:)),4);
+			WS(1,1,:,:) = mean(dataStnMostContra(1,:,:,:)*conj(dataStnMostContra(1,:,:,:)),4);
+			WS(2,2,:,:) = mean(dataStnMostContra(2,:,:,:)*conj(dataStnMostContra(2,:,:,:)),4);
+
+			% these two loops would most probably take for ever to run
+			for tIdx = 1:size(dataStnMostContra,2)
+					[H,Z,S,psi] = sfactorization_wilson2x2(squeeze(WS(:,:,tIdx,:)),f);
+
+%					I = log(WS
 
 
-			statSignificance = ones(size(pvalue)).*0;
-			statSignificance(unCorrPvalue < 0.05) = 0.6;
-			statSignificance(pvalue < 0.05) = 1;
+			end
+
+			 
+ 
 
 
 

@@ -23,7 +23,7 @@ function varargout = process_walking_timeWarp2( varargin )
 
 varargout = {};
 
-macro_methodcall;
+eval(macro_method);
 end
 
 

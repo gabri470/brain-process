@@ -21,7 +21,7 @@ function varargout = process_concat_time_event( varargin )
 %
 % Authors: Francois Tadel, 2013
 
-macro_methodcall;
+eval(macro_method);
 end
 
 

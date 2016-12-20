@@ -23,7 +23,7 @@ function varargout = process_walking_StanceVsSwing( varargin )
 
 varargout = {};
 
-macro_methodcall;
+eval(macro_method);
 end
 
 

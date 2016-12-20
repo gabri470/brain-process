@@ -21,7 +21,7 @@ function varargout = process_rejectComponents( varargin )
 		%
 		% Authors:
 
-		macro_methodcall;
+		eval(macro_method);
 end
 
 

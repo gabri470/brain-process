@@ -1,6 +1,6 @@
 function varargout = process_gaitIniPlotERSD( varargin )
 
-macro_methodcall;
+eval(macro_method);
 end
 
 

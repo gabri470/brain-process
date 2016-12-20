@@ -21,7 +21,7 @@ function varargout = process_diff_PSD( varargin )
 %
 % Authors: Francois Tadel, 2010
 
-macro_methodcall;
+eval(macro_method);
 end
 
 
