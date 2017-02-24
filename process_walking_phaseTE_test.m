@@ -50,15 +50,15 @@ end
 %% ===== RUN =====
 function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
-	DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
+%	DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
 
-	sideFile = fullfile(DATA_FOLDER,'patientSides.csv');
-	[nameSubjects, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
+%	sideFile = fullfile(DATA_FOLDER,'patientSides.csv');
+%	[nameSubjects, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
 
 	subjectNames = unique({sInputs.SubjectName});
 	nSubjects = numel(subjectNames);
 
-	mostAffSides = mostAffSides(ismember(nameSubjects,subjectNames));
+%	mostAffSides = mostAffSides(ismember(nameSubjects,subjectNames));
 
 	% we need to find files that have to be processed and group 
 	% them for subjects and conditions
@@ -70,7 +70,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	restingConMask 		= ~cellfun(@isempty,regexp(conditionStrings,'(r|R)esting'));
 
 	f1 = figure('papertype','a4','paperposition',[0 0 1 1],...
-									 'paperunits','normalized','paperorientation',...
+					 'paperunits','normalized','paperorientation',...
 										'portrait','visible','on');
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
 									 'paperunits','normalized','paperorientation',...
@@ -90,14 +90,14 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			% get bad channels	
 			standChFlag			= getfield(in_bst_data(sInputs(standingFileIdx).FileName,'ChannelFlag'),'ChannelFlag');
 
-			[standingStruct,~,standChannels]  = out_fieldtrip_data(sInputs(standingFileIdx).FileName);
+			[standingStruct,~,~]  = out_fieldtrip_data(sInputs(standingFileIdx).FileName);
 			standChannels 	= in_bst_channel(sInputs(standingFileIdx).ChannelFile);
 			standiChannels	= channel_find( standChannels.Channel,'SEEG');
 
 
 			standingStruct  = preproc(standingStruct,standiChannels,standChFlag,3);
 			% we should here quantify the STN coherence
-			standCoh				= computeCoherence(standingStruct,[{standChannels.Channel(standiChannels).Name}]);
+			standCoh				= computeCoherence(standingStruct,{standChannels.Channel(standiChannels).Name});
 
 			restingStruct   = struct('dimord',[],'trial',[],'time',[],'label',[],'elec',[]);
 
@@ -105,11 +105,11 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			for restIdx = 1:numel(restingFileIdx)
 					% read resting time-freq data
 					restChFlag 			= getfield(...
-															in_bst_data(sInputs(restingFileIdx(restIdx)).FileName,...
-																						'ChannelFlag'),'ChannelFlag');
+											in_bst_data(sInputs(restingFileIdx(restIdx)).FileName,...
+											'ChannelFlag'),'ChannelFlag');
 
 
-					[restIdxStruct,~,restChannels]  = out_fieldtrip_data(sInputs(restingFileIdx(restIdx)).FileName);
+					[restIdxStruct,~,~]  = out_fieldtrip_data(sInputs(restingFileIdx(restIdx)).FileName);
 					restChannels 		= in_bst_channel(sInputs(restingFileIdx(restIdx)).ChannelFile);
 					restiChannels		= channel_find(restChannels.Channel,'SEEG');
 					restIdxStruct  	= preproc(restIdxStruct,restiChannels,restChFlag,3);
@@ -130,15 +130,17 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			restingStruct = rmfield(restingStruct,'sampleinfo');
 			restingStruct.hdr.nTrials = numel(restingStruct.trial);
 			restCoh	= computeCoherence(restingStruct,restingStruct.label);
+            
+            restPvalue = runPermutationTest(restCoh,restingStruct,10,0.05);
 
 			walkingStruct   = struct('dimord',[],'trial',[],'time',[],'label',[],'elec',[]);
 
 			for walkIdx = 1:numel(walkingFileIdx)
-					walkChFlag 			= getfield(...
-															in_bst_data(sInputs(walkingFileIdx(walkIdx)).FileName,...
-																						'ChannelFlag'),'ChannelFlag');
+					walkChFlag 	= getfield(...
+									in_bst_data(sInputs(walkingFileIdx(walkIdx)).FileName,...
+									'ChannelFlag'),'ChannelFlag');
 
-					[walkIdxStruct,~,walkChannels]  = out_fieldtrip_data(sInputs(walkingFileIdx(walkIdx)).FileName);
+					[walkIdxStruct,~,~]  = out_fieldtrip_data(sInputs(walkingFileIdx(walkIdx)).FileName);
 					walkChannels 	= in_bst_channel(sInputs(walkingFileIdx(walkIdx)).ChannelFile);
 					walkiChannels	= channel_find(walkChannels.Channel,'SEEG');
 				
@@ -156,57 +158,63 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 		
 		  end % walking trial loop
 
-			walkingStruct = rmfield(walkingStruct,'sampleinfo');
-			walkingStruct.hdr.nTrials = numel(walkingStruct.trial);
-			walkCoh	= computeCoherence(walkingStruct,walkingStruct.label);
+          walkingStruct = rmfield(walkingStruct,'sampleinfo');
+          walkingStruct.hdr.nTrials = numel(walkingStruct.trial);
+		  walkCoh	= computeCoherence(walkingStruct,walkingStruct.label);
+          walkPvalue = runPermutationTest(walkCoh,walkingStruct,10,0.05);
 
-			ax1 = subplot(2,4,subjIdx,'NextPlot','add');
-			plot(restCoh.freq,abs(restCoh.cohspctrm),'LineWidth',2);
-			plot(standCoh.freq,abs(standCoh.cohspctrm),'LineWidth',2);
-			plot(walkCoh.freq,abs(walkCoh.cohspctrm),'LineWidth',2);	
-			legend({'rest','stand','walk'});		
-			xlim([6 60]);
-			title(subjectNames(subjIdx));
-			set(ax1,'Parent',f1);
+		  ax1 = subplot(2,4,subjIdx,'NextPlot','add');
+		  plot(restCoh.freq,abs(restCoh.cohspctrm),'LineWidth',2);
+		  plot(standCoh.freq,abs(standCoh.cohspctrm),'LineWidth',2);
+		  plot(walkCoh.freq,abs(walkCoh.cohspctrm),'LineWidth',2);	
+          legend({'rest','stand','walk'});		
+		  xlim([6 60]);
+		  title(subjectNames(subjIdx));
+		  set(ax1,'Parent',f1);
 
-
-			ax2 = subplot(2,4,subjIdx,'NextPlot','add');
-			plot(restCoh.freq,abs(imag(restCoh.cohspctrm)),'LineWidth',2);
-			plot(standCoh.freq,abs(imag(standCoh.cohspctrm)),'LineWidth',2);
-			plot(walkCoh.freq,abs(imag(walkCoh.cohspctrm)),'LineWidth',2);	
-			legend({'rest','stand','walk'});
-			xlim([6 60]);
-			title(subjectNames(subjIdx));
-			set(ax2,'Parent',f2);
+		  ax2 = subplot(2,4,subjIdx,'NextPlot','add');
+		  plot(restCoh.freq,abs(imag(restCoh.cohspctrm)),'LineWidth',2);
+		  plot(standCoh.freq,abs(imag(standCoh.cohspctrm)),'LineWidth',2);
+		  plot(walkCoh.freq,abs(imag(walkCoh.cohspctrm)),'LineWidth',2);	
+		  legend({'rest','stand','walk'});
+		  xlim([6 60]);
+		  title(subjectNames(subjIdx));
+		  set(ax2,'Parent',f2);
 
 	end % subject loop
 	clearvars walkData standData
 end % function
 
 
-function [pvalue, unCorrpvalue] = runPermutationTest(dataObs,dataA,dataB,nPermutation,alpha)
+function [pvalue, unCorrpvalue] = runPermutationTest(dataObs, data, nPermutation,alpha)
 %RUNPERMUTATIONTEST Description
 %	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
 %
-		pvalue  	 = zeros(1,90);
-		nStanding  = size(dataB,2);
-		pooledData = cat(2,dataA,dataB);
 
-		% we perform a permutation test for each STN separatelly
+		dataObs 	 = dataObs.cohspctrm;
+		
+		pvalue  	 = zeros(size(dataObs));
+
+		% we perform a permutation test
 		for permIdx = 1:nPermutation
+			for trialIdx = 1:numel(data.trial)
 
-			riffledIndices = randperm(size(pooledData,2));
+				dat = data.trial{trialIdx};
+				splitOffset = randi(size(dat,2),1);
+				dat(2,:) = [dat(2,splitOffset:end) dat(2,1:splitOffset-1)]; 
+				data.trial{trialIdx} = dat;
 
-			standPsd = pooledData(:,riffledIndices(1:nStanding),:);
-			walkPsd	= pooledData(:,riffledIndices(nStanding+1:end),:);
-			
+			end
+
 			% compute permutated statistics
-			dataPerm = (squeeze(mean(walkPsd,2)) - squeeze(mean(standPsd,2)))./squeeze(mean(standPsd,2));
+			dataPerm = computeCoherence(data,data.label);
+			dataPerm = dataPerm.cohspctrm;
 		
 			% compute pvalues for all frequencies and all time points.
 			pvalue = pvalue + double(dataPerm' > dataObs)./nPermutation;
-
+			
 		end
+
 		unCorrpvalue = pvalue;
 		pvalue = fdrCorrection(pvalue,alpha);
 
@@ -269,7 +277,7 @@ function pTE=phaseTE(Xf,lag)
 %
 % Function written by Nitin Williams, with help from Felix Siebenhuehner and Muriel Lobier 
 %
-data 						= ft_preprocessing(cfg,data);
+		data 						= ft_preprocessing(cfg,data);
 		%% Inst. phase
 		Xfh=angle(hilbert(Xf'))';
 
