@@ -1,5 +1,4 @@
 function varargout = process_walking_StandingVsWalking_PSD( varargin )
-% PROCESS_EXAMPLE_CUSTOMAVG: Example file that reads all the data files in input, and saves the average.
 
 % @=============================================================================
 % This software is part of the Brainstorm software:
@@ -38,7 +37,6 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.nInputs     = 1;
     sProcess.nMinFiles   = 1;
 
-	
 
 end
 
@@ -206,7 +204,7 @@ function crossSpectrum = computeSpectrum(filename,channelData,iChannels,timeWind
 	f 							= 1:60;
 	chancomb 				= [{channelData.Channel(iChannels).Name}];
     
-  Fs = 1/mean(diff(ftData.time{1}));
+  Fs 							= 1/mean(diff(ftData.time{1}));
 
 	cfg 						= [];
 	cfg.output 			='powandcsd';
