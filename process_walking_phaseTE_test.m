@@ -70,11 +70,16 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	restingConMask 		= ~cellfun(@isempty,regexp(conditionStrings,'(r|R)esting'));
 
 	f1 = figure('papertype','a4','paperposition',[0 0 1 1],...
-					 'paperunits','normalized','paperorientation',...
-										'portrait','visible','on');
+                    'paperunits','normalized','paperorientation',...
+						'portrait','visible','on');
+                                    
 	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
-									 'paperunits','normalized','paperorientation',...
-										'portrait','Visible','on');
+                    'paperunits','normalized','paperorientation',...
+						'portrait','Visible','on');
+                                    
+    f3 = figure('papertype','a4','paperposition',[0 0 1 1],...
+                   'paperunits','normalized','paperorientation',...
+                        'portrait','Visible','on');
 
 
 	OutputFiles = {};
@@ -97,7 +102,8 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			standingStruct  = preproc(standingStruct,standiChannels,standChFlag,3);
 			% we should here quantify the STN coherence
-			standCoh				= computeCoherence(standingStruct,{standChannels.Channel(standiChannels).Name});
+			standCoh		= computeCoherence(standingStruct,{standChannels.Channel(standiChannels).Name});
+            [standPvalue,~, standAvgSurr] = runPermutationTest(standCoh,standingStruct,10,0.05);
 
 			restingStruct   = struct('dimord',[],'trial',[],'time',[],'label',[],'elec',[]);
 
@@ -131,7 +137,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 			restingStruct.hdr.nTrials = numel(restingStruct.trial);
 			restCoh	= computeCoherence(restingStruct,restingStruct.label);
             
-            restPvalue = runPermutationTest(restCoh,restingStruct,10,0.05);
+            [restPvalue,~, restAvgSurr] = runPermutationTest(restCoh,restingStruct,10,0.05);
 
 			walkingStruct   = struct('dimord',[],'trial',[],'time',[],'label',[],'elec',[]);
 
@@ -160,33 +166,46 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
           walkingStruct = rmfield(walkingStruct,'sampleinfo');
           walkingStruct.hdr.nTrials = numel(walkingStruct.trial);
-		  walkCoh	= computeCoherence(walkingStruct,walkingStruct.label);
-          walkPvalue = runPermutationTest(walkCoh,walkingStruct,10,0.05);
+          walkCoh	= computeCoherence(walkingStruct,walkingStruct.label);
+          [walkPvalue,~, walkAvgSurr] = runPermutationTest(walkCoh,walkingStruct,10,0.05);
 
 		  ax1 = subplot(2,4,subjIdx,'NextPlot','add');
 		  plot(restCoh.freq,abs(restCoh.cohspctrm),'LineWidth',2);
-		  plot(standCoh.freq,abs(standCoh.cohspctrm),'LineWidth',2);
-		  plot(walkCoh.freq,abs(walkCoh.cohspctrm),'LineWidth',2);	
-          legend({'rest','stand','walk'});		
+          plot(restCoh.freq,abs(restAvgSurr),'--');
+	%	  plot(standCoh.freq,abs(standCoh.cohspctrm),'LineWidth',2);
+	%	  plot(walkCoh.freq,abs(walkCoh.cohspctrm),'LineWidth',2);	
+     %     legend({'rest','stand','walk'});		
 		  xlim([6 60]);
 		  title(subjectNames(subjIdx));
 		  set(ax1,'Parent',f1);
 
 		  ax2 = subplot(2,4,subjIdx,'NextPlot','add');
-		  plot(restCoh.freq,abs(imag(restCoh.cohspctrm)),'LineWidth',2);
+		%  plot(restCoh.freq,abs(imag(restCoh.cohspctrm)),'LineWidth',2);
 		  plot(standCoh.freq,abs(imag(standCoh.cohspctrm)),'LineWidth',2);
-		  plot(walkCoh.freq,abs(imag(walkCoh.cohspctrm)),'LineWidth',2);	
-		  legend({'rest','stand','walk'});
+          plot(standCoh.freq,abs(standAvgSurr),'--');
+		%  plot(walkCoh.freq,abs(imag(walkCoh.cohspctrm)),'LineWidth',2);	
+		%  legend({'rest','stand','walk'});
 		  xlim([6 60]);
 		  title(subjectNames(subjIdx));
 		  set(ax2,'Parent',f2);
+          
+          
+		  ax3 = subplot(2,4,subjIdx,'NextPlot','add');
+		%  plot(restCoh.freq,abs(imag(restCoh.cohspctrm)),'LineWidth',2);
+		%  plot(standCoh.freq,abs(imag(standCoh.cohspctrm)),'LineWidth',2);
+		  plot(walkCoh.freq,abs((walkCoh.cohspctrm)),'LineWidth',2);
+          plot(walkCoh.freq,abs(walkAvgSurr),'--');
+		%  legend({'rest','stand','walk'});
+		  xlim([6 60]);
+		  title(subjectNames(subjIdx));
+		  set(ax3,'Parent',f3);
 
 	end % subject loop
 	clearvars walkData standData
 end % function
 
 
-function [pvalue, unCorrpvalue] = runPermutationTest(dataObs, data, nPermutation,alpha)
+function [pvalue, unCorrpvalue, avgSurrogate] = runPermutationTest(dataObs, data, nPermutation,alpha)
 %RUNPERMUTATIONTEST Description
 %	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
 %
@@ -194,6 +213,7 @@ function [pvalue, unCorrpvalue] = runPermutationTest(dataObs, data, nPermutation
 		dataObs 	 = dataObs.cohspctrm;
 		
 		pvalue  	 = zeros(size(dataObs));
+        avgSurrogate = zeros(size(dataObs));
 
 		% we perform a permutation test
 		for permIdx = 1:nPermutation
@@ -209,12 +229,14 @@ function [pvalue, unCorrpvalue] = runPermutationTest(dataObs, data, nPermutation
 			% compute permutated statistics
 			dataPerm = computeCoherence(data,data.label);
 			dataPerm = dataPerm.cohspctrm;
+            avgSurrogate = avgSurrogate + dataPerm;
 		
 			% compute pvalues for all frequencies and all time points.
-			pvalue = pvalue + double(dataPerm' > dataObs)./nPermutation;
+			pvalue = pvalue + double((abs(dataPerm)' > abs(dataObs)))./nPermutation;
 			
-		end
+        end
 
+        avgSurrogate = avgSurrogate ./ nPermutation;
 		unCorrpvalue = pvalue;
 		pvalue = fdrCorrection(pvalue,alpha);
 
