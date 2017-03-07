@@ -26,7 +26,7 @@ end
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
 % Description the process
-sProcess.Comment     = 'phaseTE';
+sProcess.Comment     = 'Coherence';
 sProcess.FileTag     = '__';
 sProcess.Category    = 'Custom';
 sProcess.SubGroup    = 'Walking';
