@@ -50,7 +50,7 @@ end
 
 
 %% ===== RUN =====
-function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
+function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 
 	DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
 
@@ -70,9 +70,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 	standingConMask = ~cellfun(@isempty,regexp(conditionStrings,'(s|S)tanding'));
 	walkingConMask = ~cellfun(@isempty,regexp(conditionStrings,'Original.+SEEG'));
 
-	f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
-							 'paperunits','normalized','paperorientation',...
-								'portrait','Visible','on');
+	f2 = figure('papertype','a4','paperorientation','portrait','Visible','on');
 
 
 	OutputFiles = {};
@@ -86,9 +84,9 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 			% read standing time-freq data
 			standingStruct 	= in_bst_timefreq(sInputs(standingFileIdx).FileName);
-			parentStruct 		= bst_process('GetInputStruct',standingStruct.DataFile);
+			parentStruct 	= bst_process('GetInputStruct',standingStruct.DataFile);
 			standChannels 	= in_bst_channel(parentStruct.ChannelFile);
-			standiChannels	= channel_find( standChannels.Channel,'SEEG');
+			standiChannels	= channel_find(standChannels.Channel,'SEEG');
 
 			% we should cycle through walking trials
 			% compute the min length in order to do 
@@ -143,23 +141,23 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 %					walkiChannels	= channel_find( walkChannels.Channel,'SEEG');
 		
 					% filter cardiac and peakVelocity events from gait-related events
-					evGroupNames = {parentData.Events.label};
+					evGroupNames    = {parentData.Events.label};
 					gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
 
 					% concat all heel contact events in order to have
 					% a vector of latencies of this form: e.g.
 					% hc_L *tof_R hc_R *tof_L hc_L *tof_R hc_R *tof_L hc_L *tof_R
-					eventSamples = sort([parentData.Events(gaitEventGroups).samples]);
+					eventSamples    = sort([parentData.Events(gaitEventGroups).samples]);
 
 					% we have to correct the event adding the offset
 					% since they are referred to the 0 of the raw data 
-					evOffset 			= round(walkingStruct.Time(1)*fs);
-					eventSamples  = eventSamples - evOffset;
+					evOffset        = round(walkingStruct.Time(1)*fs);
+					eventSamples    = eventSamples - evOffset;
 
 					% we then pack trails together in order to have a matrix 2 x walkingRefLength x f x trials
 					% that we will rotate to match the form 2 x windows x walkingRefLength x f as 
 					% standing condition data are represented in
-					walkData(:,:,:,walkIdx) = walkingStruct.TF(:,eventSamples(1)+(1:walkingRefLength),:);
+% 					walkData(:,:,:,walkIdx) = walkingStruct.TF(:,eventSamples(1)+(1:walkingRefLength),:);
 
 		  end % walking trial loop
 
@@ -259,5 +257,34 @@ function pvalue = fdrCorrection(pvalue, alpha)
 	FDR 				= alpha.*(1:N)./N;
 	thr 				= FDR(find(tmpPvalue <= FDR',1,'last'));
 	pvalue(pvalue >= thr) = 1;
+
+end
+
+function psd = computePSDs(data,channelNames)
+cfg             = [];
+
+% check if any trial contains NaN values and discard it
+trlMask         = cellfun(@(x) sum(isnan(x),2),data.trial,'uni',false);
+
+trlMask         = reshape(cat(1,trlMask{:}),2,numel(data.trial));
+
+trlMask         = sum(trlMask,1) == 0;
+cfg.trials      = trlMask;
+
+fs              = 1/mean(diff(data.time{1}));
+cfg.channel     = channelNames;
+cfg.channelcmb 	= channelNames';
+cfg.output      ='powandcsd';
+cfg.taper       = 'dpss';
+tapNW           = 2;
+cfg.keeptrials 	= 'yes';
+cfg.method      = 'mtmfft';
+cfg.foi         = 1:.5:60;
+cfg.pad         = 'nextpow2';
+cfg.tapsmofrq 	= tapNW*fs/length(data.time{1});
+
+freq            = ft_freqanalysis(cfg, data);
+psd             = freq.powspctrm;
+
 
 end

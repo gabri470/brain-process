@@ -4,12 +4,12 @@ function varargout = process_walking_SingleVsDouble( varargin )
 % @=============================================================================
 % This software is part of the Brainstorm software:
 % http://neuroimage.usc.edu/brainstorm
-% 
+%
 % Copyright (c)2000-2013 Brainstorm by the University of Southern California
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPL
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
-% 
+%
 % FOR RESEARCH PURPOSES ONLY. THE SOFTWARE IS PROVIDED "AS IS," AND THE
 % UNIVERSITY OF SOUTHERN CALIFORNIA AND ITS COLLABORATORS DO NOT MAKE ANY
 % WARRANTY, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF
@@ -26,31 +26,31 @@ end
 
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
-    % Description the process
-    sProcess.Comment     = 'Single Vs Double Supp';
-    sProcess.FileTag     = '__';
-    sProcess.Category    = 'Custom';
-    sProcess.SubGroup    = 'Walking';
-    sProcess.Index       = 801;
-    % Definition of the input accepted by this process
-    sProcess.InputTypes  = {'timefreq'};
-    sProcess.OutputTypes = {'timefreq'};
-    sProcess.nInputs     = 1;
-    sProcess.nMinFiles   = 1;
-    % Definition of the options
-		% Sensor types
-		sProcess.options.sensortypes.Comment = 'Sensor types or names: ';
-		sProcess.options.sensortypes.Type    = 'text';
-		sProcess.options.sensortypes.Value   = 'SEEG';
-		sProcess.options.doWarping.Comment = 'time warping ';
-		sProcess.options.doWarping.Type    = 'checkbox';
-		sProcess.options.doWarping.Value   = true;
-		sProcess.options.saveOutput.Comment = 'Save output to brainstormDB';
-		sProcess.options.saveOutput.Type    = 'checkbox';
-		sProcess.options.saveOutput.Value   = false;
-		sProcess.options.normOnStride.Comment = 'Normalize on Stride';
-		sProcess.options.normOnStride.Type = 'checkbox';
-		sProcess.options.normOnStride.Value= false';
+% Description the process
+sProcess.Comment     = 'Single Vs Double Supp';
+sProcess.FileTag     = '__';
+sProcess.Category    = 'Custom';
+sProcess.SubGroup    = 'Walking';
+sProcess.Index       = 801;
+% Definition of the input accepted by this process
+sProcess.InputTypes  = {'timefreq'};
+sProcess.OutputTypes = {'timefreq'};
+sProcess.nInputs     = 1;
+sProcess.nMinFiles   = 1;
+% Definition of the options
+% Sensor types
+sProcess.options.sensortypes.Comment = 'Sensor types or names: ';
+sProcess.options.sensortypes.Type    = 'text';
+sProcess.options.sensortypes.Value   = 'SEEG';
+sProcess.options.doWarping.Comment = 'time warping ';
+sProcess.options.doWarping.Type    = 'checkbox';
+sProcess.options.doWarping.Value   = true;
+sProcess.options.saveOutput.Comment = 'Save output to brainstormDB';
+sProcess.options.saveOutput.Type    = 'checkbox';
+sProcess.options.saveOutput.Value   = false;
+sProcess.options.normOnStride.Comment = 'Normalize on Stride';
+sProcess.options.normOnStride.Type = 'checkbox';
+sProcess.options.normOnStride.Value= false';
 
 
 end
@@ -58,266 +58,294 @@ end
 
 %% ===== FORMAT COMMENT =====
 function Comment = FormatComment(sProcess) %#ok<DEFNU>
-    Comment = sProcess.Comment;
+Comment = sProcess.Comment;
 end
 
 
 %% ===== RUN =====
 function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
-	nFiles = numel(sInputs);
+nFiles = numel(sInputs);
 
-	DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
+DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
 
-  trialRejectionFile = fullfile(DATA_FOLDER,'trialRejection.csv');
-  [patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
-																				'%s %*s %*s %*s%s%d%*s','delimiter',',');
-	sideFile = fullfile(DATA_FOLDER,'patientSides.csv');
-	[subjectNames, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
-	nSubjects = numel(unique({sInputs.SubjectName}));
-	stnResults = cell(nSubjects,2); 
-	stnRawResults = cell(nSubjects,2);
-	% the above var holds for each subjects the STN-/+ power for each stride
-	
-	currentSubject=[];
-	subjectIdx = 0;
-	subjectNameOrdered = cell(nSubjects,1);
-	OutputFiles = {};
+trialRejectionFile = fullfile(DATA_FOLDER,'trialRejection.csv');
+[patNames,trialStrings,stepIds] = textread(trialRejectionFile,...
+    '%s %*s %*s %*s%s%d%*s','delimiter',',');
+sideFile = fullfile(DATA_FOLDER,'patientSides.csv');
+[subjectNames, mostAffSides] = textread(sideFile,'%s %s\n','delimiter',',');
+nSubjects = numel(unique({sInputs.SubjectName}));
+stnResults = cell(nSubjects,2);
+stnRawResults = cell(nSubjects,2);
+% the above var holds for each subjects the STN-/+ power for each stride
 
+currentSubject=[];
+subjectIdx = 0;
+subjectNameOrdered = cell(nSubjects,1);
+OutputFiles = {};
 
-	for fileIdx = 1:nFiles; 
+% we need to find files that have to be processed and group
+% them for subjects and conditions
+% First group all sInput.Comment together
+conditionStrings 	= {sInputs.Condition};
 
-			walkingStruct = in_bst_timefreq(sInputs(fileIdx).FileName); 
+walkingConMask      = ~cellfun(@isempty,regexp(conditionStrings,'(w|W)alking'));
 
-			parentStruct 	= bst_process('GetInputStruct',walkingStruct.DataFile);
-			parentData 		= in_bst(parentStruct.FileName);
-			channelData		= in_bst_channel(sInputs(fileIdx).ChannelFile);
-			iChannels			= channel_find(channelData.Channel,'SEEG');
-			signals				= parentData.F(iChannels,:);
-			mostAffSide		= mostAffSides(strcmpi(subjectNames,...
-																			(sInputs(fileIdx).SubjectName) ));
+offConMask          = ~cellfun(@isempty,regexpi(conditionStrings,'off'));
+notMontageConMask 	= cellfun(@isempty,regexpi(conditionStrings,'visite'));
 
-			if isempty(currentSubject) || ...
-							~strcmp(currentSubject,sInputs(fileIdx).SubjectName)
+fileIndices = find( walkingConMask & offConMask & notMontageConMask );
 
-				currentSubject = sInputs(fileIdx).SubjectName;
-				subjectIdx = subjectIdx + 1;
-				subjectNameOrdered{subjectIdx} = sInputs(fileIdx).SubjectName;
-				fprintf('Analyzing %s\n',sInputs(fileIdx).SubjectName);
-			end
+f1 = figure('papertype','a4','paperorientation','portrait','Visible','on');
 
+for fileIdx = fileIndices
+    
+    walkingStruct = in_bst_timefreq(sInputs(fileIdx).FileName);
+    
+    parentStruct 	= bst_process('GetInputStruct',walkingStruct.DataFile);
+    parentData 		= in_bst(parentStruct.FileName);
+    channelData		= in_bst_channel(sInputs(fileIdx).ChannelFile);
+    iChannels		= channel_find(channelData.Channel,'SEEG');
+    signals			= parentData.F(iChannels,:);
+    mostAffSide		= mostAffSides(strcmpi(subjectNames,...
+        (sInputs(fileIdx).SubjectName) ));
+    
+    if isempty(currentSubject) || ...
+            ~strcmp(currentSubject,sInputs(fileIdx).SubjectName)
+        
+        currentSubject = sInputs(fileIdx).SubjectName;
+        subjectIdx = subjectIdx + 1;
+        subjectNameOrdered{subjectIdx} = sInputs(fileIdx).SubjectName;
+        fprintf('Analyzing %s\n',sInputs(fileIdx).SubjectName);
+    end
+    
+    fprintf(' Trial %s\n',sInputs(fileIdx).Condition);
+    % compute sampling frequency
+    fs = round(1/mean(diff( parentData.Time )));
+    
+    % filter cardiac and peakVelocity events from gait-related events
+    evGroupNames = {parentData.Events.label};
+    gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
+    
+    % concat all heel contact events in order to have
+    % a vector of latencies of this form: e.g.
+    % hc_L *tof_R hc_R *tof_L hc_L *tof_R hc_R *tof_L hc_L *tof_R
+    [strideStart,ord]		= sort([parentData.Events(gaitEventGroups).samples]);
+    
+    evLabels = cell(1,sum(gaitEventGroups));
+    evIdx = find(gaitEventGroups);
+    
+    % extract event names
+    for iidx = 1:numel(evIdx)
+        
+        evLabels{iidx} = repmat({parentData.Events(evIdx(iidx)).label},...
+            [1 numel(parentData.Events(evIdx(iidx)).samples)]);
+        
+    end
+    
+    % re-order event names accordingly
+    evNames = [evLabels{:}];
+    evNames = evNames(ord);
+    
+    % count how many strides we have recorded
+    nStrideLeft = sum(strcmp(evNames,'heelcontact_L'))-1;
+    nStrideRight= sum(strcmp(evNames,'heelcontact_R'))-1;
+    nStrides 		= nStrideLeft + nStrideRight;
+    
+    % prepare event mask to reject artefactual or incomplete step
+    trialString = regexp(sInputs(fileIdx).Condition,'trial\d+','match');
+    subjMask 	= ismember(lower(patNames),lower(sInputs(fileIdx).SubjectName));
+    trialMask 	= (ismember(lower(trialStrings),lower(trialString)));
+    stepRej  	= stepIds(and(subjMask,trialMask));
+    
+    % stride mask each stride is composed by two steps
+    strideIndexes   = [1:nStrides;2:nStrides+1]';
+    strideRej       = find(sum(ismember(strideIndexes,stepRej),2));
+    
+    
+    % we have to correct the event adding the offset
+    % since they are referred to the 0 of the raw data
+    evOffset 		= round(walkingStruct.Time(1)*fs);
+    strideStart 	= strideStart - evOffset;
+    
+    % we create the normalized stride time vector
+    referenceTimeVector = -1:1/fs:(1-1/fs);
+    doubleSuppDur 		= floor(0.19*fs);
+    singleSuppDur 		= floor(0.4*fs);
+    
+    referenceStance 	= 400 + [ -doubleSuppDur-singleSuppDur ...
+        -singleSuppDur 0 +doubleSuppDur ...
+        +doubleSuppDur+singleSuppDur ];
+    
+    referenceVector     = [1 referenceStance 800];
+    plotIdx             = 1;
+    
+    strideCheck = evNames(bsxfun(@plus,(-1:1),(2:2:numel(evNames)-2)'));
+    nStrides    = size(strideCheck,1);
+    matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
+        'heelcontact_[R|L]'};%,'toeoff_[L|R]','heelcontact_[L|R]'};
+    
+    orderCheck = ones(1,nStrides);
+    
+    for el = 1:nStrides
+        orderCheck(el) = sum(cellfun(@isempty,cellfun(@regexp,strideCheck(el,:),...
+            matchingString,'uni',false)));
+    end
+    
+    for strideIdx = 2:2:numel(evNames)-2
+        sizeCheck = strideStart(strideIdx) -399 > 0 & ...
+                strideStart(strideIdx) + 400 <= size(walkingStruct.TF,2);
+            
+        % if the stride contains bad steps
+        % we skip it and continue to the next
+%         if ismember(plotIdx,strideRej) || orderCheck(plotIdx) > 0
+        if orderCheck(plotIdx) > 0 || ~sizeCheck
+            plotIdx = plotIdx + 1;
+            continue;
+        end
+        
+        %				[ idx ]
+        % (hc_L) *tof_R  hc_R   *tof_L (hc_L)
+        %    ^ start-2	   |t0           ^ start + 2 == end stride
+        timeWindow   = strideStart(strideIdx) + (-399:400);
+        freqMask 	 = walkingStruct.Freqs > 6;
+        dataTF 		 = abs(walkingStruct.TF(:,timeWindow,freqMask)).^2;
+        t            = (-399:400)./fs;
+        f 			 = walkingStruct.Freqs(freqMask);
+        footLabel 	 = regexp(evNames(strideIdx),'[L|R]','match');
+        footLabel	 = footLabel{:}{:};
+        % this is the label of the central event   
+        
+        if strcmp(footLabel,'L')
+            % left foot swing => central to_L
+            %  => stnContra is rightSTN == idx 1
+            controLatIdx = 1;
+            if strcmp(mostAffSide,'L')
+                % if STN- is L => this swing is relative to
+                % STN+ => plot on right side of page
+                stnIdx					= 2;
+            else
+                % if STN- is R => this swing is relative
+                % to STN- => plot on left side of page
+                stnIdx					= 1;
+            end
+        else
+            % right foot swing
+            controLatIdx = 2;
+            if strcmp(mostAffSide,'L')
+                % if STN- is R => this swing is relative
+                % to STN- => plot on left side of page
+                stnIdx					= 1;
+            else
+                % if STN- is L => this swing is relative to
+                % STN+ => plot on right side of page
+                stnIdx					= 2;
+            end
+        end
 
-			% we need to read the angular velocity
-			% and in order to do that we need to understand what trial and 
-			% which sujbect we are analysing
-%			conditionString = regexp(sInputs(fileIdx).Condition,'trial\d+','match');
-%		  angVelocityFile = fullfile(DATA_FOLDER,currentSubject,...
-%																strcat(currentSubject,'_walking',...
-%																				conditionString,'.txt'));
+        if (sProcess.options.normOnStride.Value)
+            % normalize on whole recording/trial
+            normFactor = mean(abs(walkingStruct.TF(:,:,freqMask)).^2,2);
+            normDataTF = bsxfun(@rdivide,bsxfun(@minus,dataTF,normFactor),normFactor);
+            betaMod    = squeeze(mean(normDataTF(:,:,(f>=13 & f<=30)),3));
+            
+            subplot(8,2,2*(subjectIdx-1)+stnIdx,'NextPlot','add');
+            plot(t,squeeze(betaMod(controLatIdx,:,:)),'r');
+            xlim([-0.2 0.8])
+            
+        else
+            % normalize on whole recording/trial
+            betaMod    = squeeze(mean(dataTF(:,:,(f>=13 & f<=30)),3));
+            normFactor = mean(mean(abs(walkingStruct.TF(:,:,freqMask)).^2,3),2);
+            betaMod    = bsxfun(@rdivide,bsxfun(@minus,betaMod,normFactor),normFactor);
+            
+            subplot(8,2,2*(subjectIdx-1)+stnIdx,'NextPlot','add');
+            plot(t,betaMod(controLatIdx,:),'r');
+            xlim([-0.2 0.8])
+  
+        end
+        
+        
+%         fprintf('[%d]',strideIdx);
+%         fprintf('%s ',evNames{(-2:2) + strideIdx});
+%         fprintf('\n');
+%         strideRaw	= signals(:,timeWindow)';
+%         f 		= walkingStruct.Freqs(freqMask);
+%         
+%         % then create the time-warping vector
+%         originalVector = [1 (strideStart((-2:1:2) + strideIdx)...
+%             - timeWindow(1))  800];
+%         
+%         if sProcess.options.doWarping.Value
+%             
+%             % compute the mixing matrix that maps the single orignal
+%             % stance on the normalized stance
+%             mixingMatrix 	 = mytimewarp(referenceVector,originalVector,3);
+%             
+%             % apply warping at each channel separately for both TF
+%             finalTF(1,:,:) = mixingMatrix * squeeze(dataTF(1,:,:));
+%             finalTF(2,:,:) = mixingMatrix * squeeze(dataTF(2,:,:));
+%             
+%             % and raw data
+%             finalRaw(1,:)	 = mixingMatrix * strideRaw(:,1);
+%             finalRaw(2,:)	 = mixingMatrix * strideRaw(:,2);
+% 
+%             tAxis		= referenceTimeVector;
+%             tEvAxis = repmat(referenceTimeVector(referenceStance([2 3 4])),2, 1);
+%             
+%         else
+%             finalTF 	= dataTF;
+%             finalRaw	= strideRaw';
+% 
+%             tAxis		= (-399:400)/fs;
+%             tEvAxis 	= repmat(originalVector([3 4 5])./fs,2, 1);
+%         end
+%         
 
+%         
+%         
 
-		  fprintf(' Trial %s\n',sInputs(fileIdx).Condition);
-			% compute sampling frequency
-			fs = round(1/mean(diff( parentData.Time )));
+%         
+%         
+%         % we save for each subject the time-warped ERSD normalized over***
+%         stnRawResults{subjectIdx,stnIdx} = ...
+%             cat(1,stnRawResults{subjectIdx,stnIdx},...
+%             finalTF(controLatIdx,:,:));
+%         
+%         if(~sProcess.options.normOnStride.Value)
+%             finalTF = bsxfun(@rdivide,bsxfun(@minus,finalTF,...
+%                 mean(finalTF(:,referenceStance(2):referenceStance(3),:),2)),...
+%                 std(finalTF(:,referenceStance(2):referenceStance(3),:),[],2));
+%         end
+%         
+        stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
+            betaMod(controLatIdx,:));
+%         
+%         
+%         finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
+%         time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
+        
+        plotIdx = plotIdx + 1;
+        clear finalTF;
+        
+    end % for stride
+    
+    clear finalTF;
+    
+end % for sInputs files
 
-			% filter cardiac and peakVelocity events from gait-related events
-			evGroupNames = {parentData.Events.label};
-			gaitEventGroups = ~cellfun(@isempty,regexp(evGroupNames,'(heel|toe)'));
-
-			% concat all heel contact events in order to have
-			% a vector of latencies of this form: e.g.
-			% hc_L *tof_R hc_R *tof_L hc_L *tof_R hc_R *tof_L hc_L *tof_R
-			[strideStart,ord]		= sort([parentData.Events(gaitEventGroups).samples]);
-
-			evLabels = cell(1,sum(gaitEventGroups));
-			evIdx = find(gaitEventGroups);
-
-			% extract event names
-			for iidx = 1:numel(evIdx)
-			
-					
-					evLabels{iidx} = repmat({parentData.Events(evIdx(iidx)).label},...
-							[1 numel(parentData.Events(evIdx(iidx)).samples)]);		
-
-			end
-
-			% re-order event names accordingly
-			evNames = [evLabels{:}];
-			evNames = evNames(ord);
-	
-			% count how many strides we have recorded
-			nStrideLeft = sum(strcmp(evNames,'heelcontact_L'))-1; 
-			nStrideRight= sum(strcmp(evNames,'heelcontact_R'))-1; 
-			nStrides 		= nStrideLeft + nStrideRight;
-
-			% prepare event mask to reject artefactual or incomplete step
-			trialString = regexp(sInputs(fileIdx).Condition,'trial\d+','match');
-			subjMask 		= ismember(lower(patNames),lower(sInputs(fileIdx).SubjectName)); 
-			trialMask 	= (ismember(lower(trialStrings),lower(trialString)));
-			stepRej  		= stepIds(and(subjMask,trialMask));
-
-			% stride mask each stride is composed by two steps
-			strideIndexes = [1:nStrides;2:nStrides+1]';
-			strideRej 		= find(sum(ismember(strideIndexes,stepRej),2));
-
-
-			% we have to correct the event adding the offset
-			% since they are referred to the 0 of the raw data 
-			evOffset 			= round(walkingStruct.Time(1)*fs);
-			strideStart 	= strideStart - evOffset;
-
-			% we create the normalized stride time vector
-			referenceTimeVector = -1:1/fs:(1-1/fs);
-			doubleSuppDur 			= floor(0.19*fs);
-			singleSuppDur 			= floor(0.4*fs);
-
-			referenceStance 		= 400 + [ -doubleSuppDur-singleSuppDur ...
-																				-singleSuppDur 0 +doubleSuppDur ...
-																		+doubleSuppDur+singleSuppDur ];
-
-			referenceVector			= [1 referenceStance 800];
-			plotIdx = 1;
-
-			strideCheck = evNames(bsxfun(@plus,(-2:2),(3:2:numel(evNames)-2)'));
-			nStrides = size(strideCheck,1);
-			matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
-						'heelcontact_[R|L]','toeoff_[L|R]','heelcontact_[L|R]'};
-
-			orderCheck = ones(1,nStrides);
-
-			for el = 1:nStrides
-					orderCheck(el) = sum(cellfun(@isempty,cellfun(@regexp,strideCheck(el,:),...
-															matchingString,'uni',false)));
-			end
-
-			for strideIdx = 3:2:numel(evNames)-2
-
-					% if the stride contains bad steps 
-					% we skip it and continue to the next
-					if ismember(plotIdx,strideRej) || orderCheck(plotIdx) > 0
-							plotIdx = plotIdx + 1;
-							continue;
-					end
-
-					%								[ idx ] 	
-					% (hc_L) *tof_R  hc_R   *tof_L (hc_L) 
-					%    ^ start-2		|t0				      ^ start + 2 == end stride
-					timeWindow = strideStart(strideIdx) + (-399:400);
-					freqMask 	 = walkingStruct.Freqs > 6;
-					dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
-
-					if (sProcess.options.normOnStride.Value) 
-							% normalize on stride
-							normFactor = repmat(mean(dataTF,2),[1 numel(timeWindow) 1]);
-							dataTF 		 = (dataTF-normFactor)./normFactor;
-					else
-							% normalize on swing only
-							% this means that we are not normalizing here 
-							% but do it later after warping
-							% for simplicity in the code. NOT SURE IF THIS IS THE CORRECT WAY
-							% TODO check whether we have an effect of normalization order
- 
-					end
-
-
-					fprintf('[%d]',strideIdx);
-					fprintf('%s ',evNames{(-2:2) + strideIdx});
-					fprintf('\n');
-					strideRaw	 = signals(:,timeWindow)';
-					f 				 = walkingStruct.Freqs(freqMask);	
-
-					% then create the time-warping vector
-					originalVector = [1 (strideStart((-2:1:2) + strideIdx)...
-															- timeWindow(1))  800];
-
-					if sProcess.options.doWarping.Value
-
-							% compute the mixing matrix that maps the single orignal
-							% stance on the normalized stance
-							mixingMatrix 	 = mytimewarp(referenceVector,originalVector,3);
-
-							% apply warping at each channel separately for both TF 
-							finalTF(1,:,:) = mixingMatrix * squeeze(dataTF(1,:,:));
-							finalTF(2,:,:) = mixingMatrix * squeeze(dataTF(2,:,:));
-					
-							% and raw data
-							finalRaw(1,:)	 = mixingMatrix * strideRaw(:,1);
-							finalRaw(2,:)	 = mixingMatrix * strideRaw(:,2);
-
-							zLimit 	= [-1 1];
-							tAxis		= referenceTimeVector;
-							tEvAxis = repmat(referenceTimeVector(referenceStance([2 3 4])),2, 1);
-
-					else
-							finalTF 	= dataTF;
-							finalRaw	= strideRaw';
-							zLimit 		= [min(finalTF(:)) max(finalTF(:))];
-							tAxis			= (-399:400)/fs;
-							tEvAxis 	= repmat(originalVector([3 4 5])./fs,2, 1);
-					end
-
-					footLabel 		 	= regexp(evNames(strideIdx),'[L|R]','match');
-					footLabel				= footLabel{:}{:}; 
-					% this is the label of the central event 
-
-
-					if strcmp(footLabel,'L')
-							% left foot swing => central hc_L
-							%  => stnContra is rightSTN == idx 1
-							controLatIdx = 1;
-							if strcmp(mostAffSide,'L')
-								% if STN- is L => this swing is relative to 
-								% STN+ => plot on right side of page
-								stnIdx					= 2;
-							else 
-								% if STN- is R => this swing is relative
-								% to STN- => plot on left side of page
-								stnIdx					= 1;
-							end
-					else 
-							% right foot swing
-							controLatIdx = 2;
-							if strcmp(mostAffSide,'L')
-								% if STN- is R => this swing is relative
-								% to STN- => plot on left side of page
-								stnIdx					= 1;
-							else 
-								% if STN- is L => this swing is relative to 
-								% STN+ => plot on right side of page
-								stnIdx					= 2;
-							end
-					end
-
-					
-					% we save for each subject the time-warped ERSD normalized over***
-					stnRawResults{subjectIdx,stnIdx} = ...
-							cat(1,stnRawResults{subjectIdx,stnIdx},...
-																								finalTF(controLatIdx,:,:));
-
-					if(~sProcess.options.normOnStride.Value)
-							finalTF = bsxfun(@rdivide,bsxfun(@minus,finalTF,...
-									mean(finalTF(:,referenceStance(2):referenceStance(3),:),2)),...
-									std(finalTF(:,referenceStance(2):referenceStance(3),:),[],2));
-					end
-
-					stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
-																								finalTF(controLatIdx,:,:));
-
-
-					finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
-%					time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
-
-					plotIdx = plotIdx + 1;
-					clear finalTF;
-
-			end % for stride
-
-			clear finalTF;
-
-	end % for sInputs files
-
-	% stnResults holds ERSD for each stride divide as STN-/+
-%	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
+% stnResults holds ERSD for each stride divide as STN-/+
+	stnMeans = cellfun(@nanmean,stnResults,'UniformOutput',false);
+    nSubjects = numel(subjectNameOrdered);
+    figure
+    for subjIdx = 1:nSubjects
+        subplot(8,2,2*(subjIdx-1)+1,'NextPlot','add')
+        plot(t,stnMeans{subjIdx,1},'LineWidth',2,'Color','b');
+        xlim([-0.2 0.8])
+        subplot(8,2,2*(subjIdx-1)+2,'NextPlot','add')
+        plot(t,stnMeans{subjIdx,2},'LineWidth',2,'Color','b')
+        xlim([-0.2 0.8])
+    end
 %
 %
 %	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
@@ -345,109 +373,109 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 
 
-	highBetaMask = f >= 6 & f <= 19;
-	lowBetaMask = f >= 20 & f <= 35;
-	gammaMask  = f > 13 & f < 80;
+highBetaMask = f >= 6 & f <= 19;
+lowBetaMask = f >= 20 & f <= 35;
+gammaMask  = f > 13 & f < 80;
 
-	patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
-	[~,ord] = ismember(patientsOrder,subjectNameOrdered);
+patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
+[~,ord] = ismember(patientsOrder,subjectNameOrdered);
 
-	plotIdx = 1;
+plotIdx = 1;
 
-	groupData = ones(8,numel(tAxis),3,2);
+groupData = ones(8,numel(tAxis),3,2);
 
-	for ii = ord
-			f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
-							 'paperunits','normalized','paperorientation',...
-								'portrait','Visible','on');
-			stnMostAff = stnRawResults{ii,1};
-			stnLessAff = stnRawResults{ii,2};
+for ii = ord
+    f2 = figure('papertype','a4','paperposition',[0 0 1 1],...
+        'paperunits','normalized','paperorientation',...
+        'portrait','Visible','on');
+    stnMostAff = stnRawResults{ii,1};
+    stnLessAff = stnRawResults{ii,2};
+    
+    plotIdx = 1;
+    nSubjects = 1;
+    
+    stnMostAffERSD = computeERSD(stnMostAff,referenceStance,1);
+    stnLessAffERSD = computeERSD(stnLessAff,referenceStance,1);
+    
+    [pvalue(1,:,:), unCorrPvalue(1,:,:)] = ...
+        runPermutationTest(stnMostAffERSD,...
+        stnMostAff,100,referenceStance);
+    [pvalue(2,:,:), unCorrPvalue(2,:,:)] = ...
+        runPermutationTest(stnLessAffERSD,...
+        stnLessAff,100,referenceStance);
+    
+    
+    statSignificance = ones(size(pvalue)).*0;
+    statSignificance(unCorrPvalue < 0.05) = 0.6;
+    statSignificance(pvalue < 0.05) = 1;
+    
+    
+    
+    subplot(nSubjects*2,2,4*(plotIdx-1)+1,'NextPlot','add')
+    
+    h = imagesc(tAxis,f,(stnMostAffERSD.*squeeze(statSignificance(1,:,:)))');
+    %			set(h,'AlphaData',squeeze(statSignificance(1,:,:))')
+    plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+    axis xy;
+    axis xy;
+    set(gca,'XTickLabel',[]);
+    xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+    ylim([6 80]);
+    
+    
+    subplot(nSubjects*2,2,4*(plotIdx-1)+2,'NextPlot','add')
+    h = imagesc(tAxis,f,(stnLessAffERSD.*squeeze(statSignificance(2,:,:)))');
+    %			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
+    plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
+    xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+    axis xy;
+    set(gca,'XTickLabel',[]);
+    ylim([6 80]);
+    
+    % this is the STN-
+    annotation('textbox',[0.05, 0.85-(plotIdx-1)*0.1, 0.1, 0.05],...
+        'String',subjectNameOrdered{ii},'LineStyle','None');
+    
+    subplot(nSubjects*2,2,4*(plotIdx-1)+3,'NextPlot','add')
+    plot(tAxis,mean(stnMostAffERSD(:,highBetaMask),2),'r');
+    plot(tAxis,mean(stnMostAffERSD(:,lowBetaMask),2),'g');
+    plot(tAxis,mean(stnMostAffERSD(:,gammaMask),2),'b');
+    %			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
+    xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+    
+    subplot(nSubjects*2,2,4*(plotIdx-1)+4,'NextPlot','add')
+    plot(tAxis,mean(stnLessAffERSD(:,highBetaMask),2),'r');
+    plot(tAxis,mean(stnLessAffERSD(:,lowBetaMask),2),'g');
+    plot(tAxis,mean(stnLessAffERSD(:,gammaMask),2),'b');
+    %			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
+    xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+    
+    
+    plotIdx = plotIdx + 1;
+    
+    % groupData cointains single-subject mean time profiles
+    % for 3 frequency bands of interest
+    %			groupData(ii,:,1,1) = mean(stnMostAff(:,lowBetaMask),2);
+    %			groupData(ii,:,1,2) = mean(stnLessAff(:,lowBetaMask),2);
+    %			groupData(ii,:,2,1) = mean(stnMostAff(:,highBetaMask),2);
+    %			groupData(ii,:,2,2) = mean(stnLessAff(:,highBetaMask),2);
+    %			groupData(ii,:,3,1) = mean(stnMostAff(:,gammaMask),2);
+    %			groupData(ii,:,3,2) = mean(stnLessAff(:,gammaMask),2);
+    %
+    %			plotIdx = plotIdx + 1;
+    %
+    %
+    fname = fullfile(getenv('HOME'),'Dropbox','Isaias_group',...
+        'walking','figs',strcat(subjectNameOrdered{ii},'_avgZScoreSinVsDouble.png'));
+    
+    
+    
+    print(f2, '-dpng',fname);
+    
+end
 
-			plotIdx = 1;
-			nSubjects = 1;
-
-			stnMostAffERSD = computeERSD(stnMostAff,referenceStance,1);
-			stnLessAffERSD = computeERSD(stnLessAff,referenceStance,1);
-
-			[pvalue(1,:,:), unCorrPvalue(1,:,:)] = ...
-												runPermutationTest(stnMostAffERSD,...
-															stnMostAff,100,referenceStance);
-			[pvalue(2,:,:), unCorrPvalue(2,:,:)] = ...
-												runPermutationTest(stnLessAffERSD,...
-															stnLessAff,100,referenceStance);
-
-
-			statSignificance = ones(size(pvalue)).*0;
-			statSignificance(unCorrPvalue < 0.05) = 0.6;
-			statSignificance(pvalue < 0.05) = 1;
-
-
-
-				subplot(nSubjects*2,2,4*(plotIdx-1)+1,'NextPlot','add')
-
-			h = imagesc(tAxis,f,(stnMostAffERSD.*squeeze(statSignificance(1,:,:)))');
-%			set(h,'AlphaData',squeeze(statSignificance(1,:,:))')
-			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
-			axis xy;
-			axis xy;
-			set(gca,'XTickLabel',[]);
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-			ylim([6 80]);
-
-
-			subplot(nSubjects*2,2,4*(plotIdx-1)+2,'NextPlot','add')
-		  h = imagesc(tAxis,f,(stnLessAffERSD.*squeeze(statSignificance(2,:,:)))');
-%			set(h,'AlphaData',squeeze(statSignificance(2,:,:))')
-			plot(tEvAxis,repmat([min(f);max(f)],[1 3]),'k--');
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-			axis xy;
-			set(gca,'XTickLabel',[]);
-			ylim([6 80]);
-
-			% this is the STN- 
-			annotation('textbox',[0.05, 0.85-(plotIdx-1)*0.1, 0.1, 0.05],...
-								'String',subjectNameOrdered{ii},'LineStyle','None');
-
-			subplot(nSubjects*2,2,4*(plotIdx-1)+3,'NextPlot','add')
-			plot(tAxis,mean(stnMostAffERSD(:,highBetaMask),2),'r');
-			plot(tAxis,mean(stnMostAffERSD(:,lowBetaMask),2),'g');
-			plot(tAxis,mean(stnMostAffERSD(:,gammaMask),2),'b');
-%			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-
-			subplot(nSubjects*2,2,4*(plotIdx-1)+4,'NextPlot','add')
-			plot(tAxis,mean(stnLessAffERSD(:,highBetaMask),2),'r');
-			plot(tAxis,mean(stnLessAffERSD(:,lowBetaMask),2),'g');
-			plot(tAxis,mean(stnLessAffERSD(:,gammaMask),2),'b');
-%			plot(tEvAxis,repmat([-3;3],[1 3]),'k--');
-			xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-
-
-			plotIdx = plotIdx + 1;
-
-			% groupData cointains single-subject mean time profiles
-			% for 3 frequency bands of interest
-%			groupData(ii,:,1,1) = mean(stnMostAff(:,lowBetaMask),2);
-%			groupData(ii,:,1,2) = mean(stnLessAff(:,lowBetaMask),2);
-%			groupData(ii,:,2,1) = mean(stnMostAff(:,highBetaMask),2);
-%			groupData(ii,:,2,2) = mean(stnLessAff(:,highBetaMask),2);
-%			groupData(ii,:,3,1) = mean(stnMostAff(:,gammaMask),2);
-%			groupData(ii,:,3,2) = mean(stnLessAff(:,gammaMask),2);
-%			
-%			plotIdx = plotIdx + 1;
-%
-%
-			fname = fullfile(getenv('HOME'),'Dropbox','Isaias_group',...
-					'walking','figs',strcat(subjectNameOrdered{ii},'_avgZScoreSinVsDouble.png'));
-
-
-
-			print(f2, '-dpng',fname);
-
-	end
-
-	fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
-			'avgZScoreSinVsDouble.ps');
+fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+    'avgZScoreSinVsDouble.ps');
 
 %	grPval = nan(size(groupData,2),3,2);
 %	for fIdx= 1:3
@@ -475,7 +503,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 %			'grLvlZScoreSinVsDouble.ps');
 %
 %	print(fn,'-dpsc',fname);
-	%	print(f2,'-dpsc',fname);
+%	print(f2,'-dpsc',fname);
 
 %	for ii = 1:nSubjects
 %
@@ -536,39 +564,39 @@ function [pvalue, unCorrpvalue] = runPermutationTest(obsERSD,stnData,nPermutatio
 %RUNPERMUTATIONTEST Description
 %	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
 %
-		pvalue  	= zeros(800,84);
-		nSwing  	= size(stnData,1);
+pvalue  	= zeros(800,84);
+nSwing  	= size(stnData,1);
 
-		dataPerm  = stnData;
+dataPerm  = stnData;
 
-		% we perform a permutation test for each STN separatelly
-		for permIdx = 1:nPermutation
-			
-			% for each swing we randomly split the signal in two chunks 
-			% and rotate them
-			for swingIdx = 1:nSwing
-
-				dataPerm(swingIdx,:,:) = randCircShift(stnData(swingIdx,:,:)); 
-
-			end
-			
-			% compute permutated statistics
-			permERSD = computeERSD(dataPerm,referenceStance,2);
-				
-			% compute pvalues for all frequencies and all time points.
-			pvalue = pvalue + double(permERSD > obsERSD)./nPermutation;
-
-		end
-		unCorrpvalue = pvalue;
-		pvalue = fdrCorrection(pvalue,0.05);
+% we perform a permutation test for each STN separatelly
+for permIdx = 1:nPermutation
+    
+    % for each swing we randomly split the signal in two chunks
+    % and rotate them
+    for swingIdx = 1:nSwing
+        
+        dataPerm(swingIdx,:,:) = randCircShift(stnData(swingIdx,:,:));
+        
+    end
+    
+    % compute permutated statistics
+    permERSD = computeERSD(dataPerm,referenceStance,2);
+    
+    % compute pvalues for all frequencies and all time points.
+    pvalue = pvalue + double(permERSD > obsERSD)./nPermutation;
+    
+end
+unCorrpvalue = pvalue;
+pvalue = fdrCorrection(pvalue,0.05);
 
 end
 
 
 function A = randCircShift(A)
 
-		idx 			= randi(size(A,2),1);
-		A(1,:,:) 	= cat(2,A(1,idx:end,:),A(1,1:idx-1,:));
+idx 			= randi(size(A,2),1);
+A(1,:,:) 	= cat(2,A(1,idx:end,:),A(1,1:idx-1,:));
 
 end
 
@@ -577,37 +605,37 @@ function pvalue = fdrCorrection(pvalue, alpha)
 %	PVALUE  = FDRCORRECTION() Long description
 %
 
-	tmpPvalue 	= sort(pvalue(:));
-	N 					= numel(pvalue);
-	FDR 				= alpha.*(1:N)./N;
-	thr 				= FDR(find(tmpPvalue <= FDR',1,'last'));
-	pvalue(pvalue >= thr) = 1;
+tmpPvalue 	= sort(pvalue(:));
+N 					= numel(pvalue);
+FDR 				= alpha.*(1:N)./N;
+thr 				= FDR(find(tmpPvalue <= FDR',1,'last'));
+pvalue(pvalue >= thr) = 1;
 
 end
 function stnResult = computeERSD(stnData,referenceStance,method)
 %	 COMPUTEERSD of a single STN for a single subject
 %
 
-% stnData contains each trial morphed in the 
+% stnData contains each trial morphed in the
 % => stnData [ n x time x freq ]
 
-% compute the normlization factor concatenating all baseline 
+% compute the normlization factor concatenating all baseline
 % and computing the mean across trials
-	[n,~,f] = size(stnData);
-	tBaseline = referenceStance(2):referenceStance(3);
-	t = numel(tBaseline);
-	
-	numFactor = mean(mean(stnData(:,tBaseline,:),1));
-	denFactor = std(reshape(stnData(:,tBaseline,:),[n*t,f]));
+[n,~,f] = size(stnData);
+tBaseline = referenceStance(2):referenceStance(3);
+t = numel(tBaseline);
 
-	if method
-		% rel change
-		stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),numFactor);
-	else
-		% pseudo-zscore
-		stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),denFactor);
-	end
+numFactor = mean(mean(stnData(:,tBaseline,:),1));
+denFactor = std(reshape(stnData(:,tBaseline,:),[n*t,f]));
 
-	stnResult = squeeze(mean(stnResult));
+if method
+    % rel change
+    stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),numFactor);
+else
+    % pseudo-zscore
+    stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),denFactor);
+end
+
+stnResult = squeeze(mean(stnResult));
 
 end

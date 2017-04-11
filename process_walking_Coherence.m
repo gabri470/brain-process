@@ -48,7 +48,7 @@ end
 
 
 %% ===== RUN =====
-function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
+function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 
 %	DATA_FOLDER = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','info');
 
@@ -84,8 +84,8 @@ f4 = figure('papertype','a4','paperorientation',...
 OutputFiles = {};
 
 nPermutation = 10;
-nFilters		 = 12;
-alpha				 = 0.05;
+%nFilters     = 12;
+alpha		 = 0.05;
 
 for subjIdx = 1:nSubjects
     % for each subject separately we pick standing condition
@@ -96,7 +96,7 @@ for subjIdx = 1:nSubjects
     restingFileIdx 	= find(subjectMask & restingConMask);
     
     % get bad channels
-    standChFlag			= getfield(in_bst_data(sInputs(standingFileIdx).FileName,'ChannelFlag'),'ChannelFlag');
+    standChFlag		= getfield(in_bst_data(sInputs(standingFileIdx).FileName,'ChannelFlag'),'ChannelFlag');
     
     [standingStruct,~,~]  = out_fieldtrip_data(sInputs(standingFileIdx).FileName);
     standChannels 	= in_bst_channel(sInputs(standingFileIdx).ChannelFile);
@@ -106,7 +106,7 @@ for subjIdx = 1:nSubjects
     standingStruct  = preproc(standingStruct,standiChannels,standChFlag,3);
     % we should here quantify the STN coherence
     standCoh		= computeCoherence(standingStruct,{standChannels.Channel(standiChannels).Name});
-    [~,standPvalue,standAvgSurr,standStdSurr] = runPermutationTest(standCoh,standingStruct,nPermutation,alpha);
+    [~,standPvalue,standAvgSurr,~] = runPermutationTest(standCoh,standingStruct,nPermutation,alpha);
     
     %			filteredstandingStruct = narrowBandFiltering(standingStruct, nFilters,standiChannels,standChFlag,3);
     %			[standPlv, f] = computePhaseMetric(filteredstandingStruct,standingStruct.label,nPermutation);
@@ -144,7 +144,7 @@ for subjIdx = 1:nSubjects
     %			filteredWalkingStruct = narrowBandFiltering(walkingStruct, nFilters);
     %			[walkPlv, f] = computePhaseMetric(filteredWalkingStruct,walkingStruct.label);
     
-    [~,restPvalue, restAvgSurr,restStdSurr] = runPermutationTest(restCoh,restingStruct,nPermutation,alpha);
+    [~,restPvalue, restAvgSurr,~] = runPermutationTest(restCoh,restingStruct,nPermutation,alpha);
     
     walkingStruct   = struct('dimord',[],'trial',[],'time',[],'label',[],'elec',[]);
     
@@ -176,7 +176,7 @@ for subjIdx = 1:nSubjects
     walkingStruct.hdr.nTrials = numel(walkingStruct.trial);
     walkCoh	= computeCoherence(walkingStruct,walkingStruct.label);
     %			[walkPlv, f] = computePhaseMetric(filteredWalkingStruct,walkingStruct.label);
-    [~,walkPvalue, walkAvgSurr,walkStdSurr] = runPermutationTest(walkCoh,walkingStruct,nPermutation,alpha);
+    [~,walkPvalue, walkAvgSurr,~] = runPermutationTest(walkCoh,walkingStruct,nPermutation,alpha);
     
     
     ax1 = subplot(2,4,subjIdx,'NextPlot','add');
@@ -315,246 +315,180 @@ function coh = computeCoherence(data,channelNames)
 cfg = [];
 
 % check if any trial contains NaN values and discard it
-trlMask					= cellfun(@(x) sum(isnan(x),2),data.trial,'uni',false);
-trlMask 				= reshape(cat(1,trlMask{:}),2,numel(data.trial));
-trlMask					= sum(trlMask,1) == 0;
-cfg.trials			= trlMask;
+trlMask	= cellfun(@(x) sum(isnan(x),2),data.trial,'uni',false);
 
-fs 							= 1/mean(diff(data.time{1}));
-cfg.channel 		= channelNames;
+trlMask = reshape(cat(1,trlMask{:}),2,numel(data.trial));
+
+trlMask     = sum(trlMask,1) == 0;
+cfg.trials	= trlMask;
+
+fs 			= 1/mean(diff(data.time{1}));
+cfg.channel = channelNames;
 cfg.channelcmb 	= channelNames';
-cfg.output 			='powandcsd';
-cfg.taper 			= 'dpss';
-tapNW						= 2;
+cfg.output 	='powandcsd';
+cfg.taper 	= 'dpss';
+tapNW		= 2;
 cfg.keeptrials 	= 'yes';
-cfg.method  		= 'mtmfft';
-cfg.foi 				= 1:.5:60;
-cfg.pad 				= 'nextpow2';
+cfg.method  = 'mtmfft';
+cfg.foi 	= 1:.5:60;
+cfg.pad 	= 'nextpow2';
 cfg.tapsmofrq 	= tapNW*fs/length(data.time{1});
 
-freq						= ft_freqanalysis(cfg, data);
+freq		= ft_freqanalysis(cfg, data);
 
-cfg.method 			= 'coh';
-cfg.complex 		= 'complex';
+cfg.method 	= 'coh';
+cfg.complex = 'complex';
 
-coh 						= ft_connectivityanalysis(cfg,freq);
-
-end
-
-function [pTE, plv, f, nPLV] = computePhaseMetric(data,channelNames,nPermutation)
-% Description
-%	[PTE,PLV, F] = computePhaseMetric(data,channelNames)
-%
-chMask	 = ~cellfun(@isempty,regexp(channelNames,'E[0-9]*'));
-nFilters = numel(data);
-nTrials  = numel(data(1).trial);
-plv 		 = complex(zeros(nFilters,nTrials),zeros(nFilters,nTrials));
-pTE 		 = zeros(nFilters,nTrials);
-plvSurr	 = complex(zeros(nFilters,nTrials),zeros(nFilters,nTrials));
-
-for fIdx = 1:nFilters
-    
-    % check if any trial contains NaN values and discard it
-    trlMask  = cellfun(@(x) sum(isnan(x),2),data(fIdx).trial,'uni',false);
-    trlMask  = reshape(cat(1,trlMask{:}),2,numel(data(fIdx).trial));
-    trlMask	 = sum(trlMask,1) == 0;
-    nTrials  = numel(trlMask);
-    trialIndices = 1:nTrials;
-    
-    for trialIdx = trialIndices(trlMask)
-        %			function [pTE, plv, plvSurr] = phaseTE(Xf,lag,nPermutation)
-        [plv(fIdx,trialIdx),plvSurr(fIdx,trialIdx,:)] = ...
-            phaseAmplitudeCorrelation(data(fIdx).trial{trialIdx}(chMask,:),nPermutation);
-        
-    end
-    
-end
-% get the mean across trials for each filter
-plv 		= squeeze(mean(plv,2));
-
-% get the mean across trials and across permutations for each filter
-plvSurr = squeeze(mean(mean(plvSurr,2),3));
-
-% this represent p>0.05 confidence limit
-nPLV 		= plv./plvSurr;
+coh 		= ft_connectivityanalysis(cfg,freq);
 
 end
 
-function [plv,plvSurr,ampCorr,ampCorrSurr] = phaseAmplitudeCorrelation(X,nPermutation)
-% Description
-%	[PLV,PLVSURR,AMPCORR,AMPCORRSURR] = phaseAmplitudeCorrelation(X,nPermutation)
-%
-%		%% Inst. phase
-Xfc= hilbert(X')';
-Xfh=angle(Xfc);
-amp=abs(Xfc);
+% function [pTE, plv, f, nPLV] = computePhaseMetric(data,channelNames,nPermutation)
+% % Description
+% %	[PTE,PLV, F] = computePhaseMetric(data,channelNames)
+% %
+% chMask	 = ~cellfun(@isempty,regexp(channelNames,'E[0-9]*'));
+% nFilters = numel(data);
+% nTrials  = numel(data(1).trial);
+% plv 	 = complex(zeros(nFilters,nTrials),zeros(nFilters,nTrials));
+% pTE 	 = zeros(nFilters,nTrials);
+% plvSurr	 = complex(zeros(nFilters,nTrials),zeros(nFilters,nTrials));
+% 
+% for fIdx = 1:nFilters
+%     
+%     % check if any trial contains NaN values and discard it
+%     trlMask  = cellfun(@(x) sum(isnan(x),2),data(fIdx).trial,'uni',false);
+%     trlMask  = reshape(cat(1,trlMask{:}),2,numel(data(fIdx).trial));
+%     trlMask	 = sum(trlMask,1) == 0;
+%     nTrials  = numel(trlMask);
+%     trialIndices = 1:nTrials;
+%     
+%     for trialIdx = trialIndices(trlMask)
+%         %			function [pTE, plv, plvSurr] = phaseTE(Xf,lag,nPermutation)
+%         [plv(fIdx,trialIdx),plvSurr(fIdx,trialIdx,:)] = ...
+%             phaseAmplitudeCorrelation(data(fIdx).trial{trialIdx}(chMask,:),nPermutation);
+%         
+%     end
+%     
+% end
+% % get the mean across trials for each filter
+% plv 	= squeeze(mean(plv,2));
+% % get the mean across trials and across permutations for each filter
+% plvSurr = squeeze(mean(mean(plvSurr,2),3));
+% 
+% % this represent p>0.05 confidence limit
+% nPLV 	= plv./plvSurr;
+% 
+% end
 
-ampCorr = corrcoef(amp');
-ampCorr = ampCorr(1,2);
-
-phi=diff(Xfh);
-plv=mean(exp(1i*phi),2);
-
-
-for pIdx = 1:nPermutation
-    % compute surrogate
-    offset 						= randi(size(Xfc,2),1);
-    Xfc(2,:)					= circshift(Xfc(2,:),offset);
-    
-    phi								= diff(angle(Xfc));
-    plvSurr(pIdx)			= mean(exp(1i*phi),2);
-    tmp								= corrcoef(abs(Xfc)');
-    ampCorrSurr(pIdx) = tmp(1,2);
-end
-end
-
-
-
-function [pTE ] = phaseTE(Xf,lag,nPermutation)
-% Inputs:
-% Xf is 2D matrix, i.e. channels x samples
-% lag is the expected delay, expressed in samples
-% Outputs:
-% pTE(1,2) is phase TE from 1 to 2
-% pTE(2,1) is phase TE from 2 to 1
-%
-% Function written by Nitin Williams, with help from Felix Siebenhuehner and Muriel Lobier
-%
-%% Inst. phase
-Xfh=angle(hilbert(Xf')');
-
-
-%% Number of bins
-
-for idx=1:size(Xfh,1),
-    [~,dirsd(idx,1)]=circ_std(Xfh(idx,:),[],[],2);
-end
-
-N=size(Xf,2);
-bw=(((3.49).*dirsd)./(N^(1/3)));
-numbins=round((2*pi)./bw);
-
-%% Computing normalised histograms
-
-tX=Xfh(1,1+lag:end);
-tY=Xfh(2,1+lag:end);
-tXd=Xfh(1,1:end-lag);
-tYd=Xfh(2,1:end-lag);
-
-tXh=discretize(tX,linspace(-pi,pi,numbins(1,1)));
-tYh=discretize(tY,linspace(-pi,pi,numbins(2,1)));
-tXdh=discretize(tXd,linspace(-pi,pi,numbins(1,1)));
-tYdh=discretize(tYd,linspace(-pi,pi,numbins(2,1)));
-
-[P_YYd,~,~]=crosstab(tYh,tYdh); P_YYd=P_YYd./sum(P_YYd(:));
-[P_YdXd,~,~]=crosstab(tYdh,tXdh); P_YdXd=P_YdXd./sum(P_YdXd(:));
-[P_Yd,~,~]=crosstab(tYdh); P_Yd=P_Yd./sum(P_Yd(:));
-[P_YYdXd,~,~]=crosstab(tYh,tYdh,tXdh); P_YYdXd=P_YYdXd./sum(P_YYdXd(:));
-
-[P_XXd,~,~]=crosstab(tXh,tXdh); P_XXd=P_XXd./sum(P_XXd(:));
-[P_XdYd,~,~]=crosstab(t101Xdh,tYdh); P_XdYd=P_XdYd./sum(P_XdYd(:));
-[P_Xd,~,~]=crosstab(tXdh); P_Xd=P_Xd./sum(P_Xd(:));
-[P_XXdYd,~,~]=crosstab(tXh,tXdh,tYdh); P_XXdYd=P_XXdYd./sum(P_XXdYd(:));
-
-%% Entropy & pTE calculation
-H_YYd = sum(-(P_YYd(P_YYd>0).*(log2(P_YYd(P_YYd>0)))));
-H_YdXd = sum(-(P_YdXd(P_YdXd>0).*(log2(P_YdXd(P_YdXd>0)))));
-H_Yd = sum(-(P_Yd(P_Yd>0).*(log2(P_Yd(P_Yd>0)))));
-H_YYdXd = sum(-(P_YYdXd(P_YYdXd>0).*(log2(P_YYdXd(P_YYdXd>0)))));
-
-pTE(1,1)=NaN;
-pTE(2,2)=NaN;
-pTE(1,2)=H_YYd+H_YdXd-H_Yd-H_YYdXd;
-
-H_XXd = sum(-(P_XXd(P_XXd>0).*(log2(P_XXd(P_XXd>0)))));
-H_XdYd = sum(-(P_XdYd(P_XdYd>0).*(log2(P_XdYd(P_XdYd>0)))));
-H_Xd = sum(-(P_Xd(P_Xd>0).*(log2(P_Xd(P_Xd>0)))));
-H_XXdYd = sum(-(P_XXdYd(P_XXdYd>0).*(log2(P_XXdYd(P_XXdYd>0)))));
-
-pTE(2,1)=H_XXd+H_XdYd-H_Xd-H_XXdYd;
-
-end
-
-function data = preproc(data,iChannels,chFlag,trialLength)
-%	preproc
-%	data = preproc() split data in trials
-%
-
-if any(ismember(find(chFlag==-1),iChannels))
-    data = [];
-    return
-end
-
-cfg = [];
-% at this point the recordings are just a single
-% continuos stream of samples.
-begRecording 		= min(data.time{1});
-endRecording 		= max(data.time{1});
-
-fs 							= 1/mean(diff(data.time{1}));
-
-% we should split this in ntrials of 3s
-totLength 			= endRecording-begRecording;
-nTrials   			= floor(totLength/trialLength);
-offset 					= totLength/2;
-analysisWindow	= nTrials*trialLength;
-startTime 			= offset - analysisWindow/2;
-endTime   			= analysisWindow/2+offset;;
+% function [plv,plvSurr,ampCorr,ampCorrSurr] = phaseAmplitudeCorrelation(X,nPermutation)
+% % Description
+% %	[PLV,PLVSURR,AMPCORR,AMPCORRSURR] = phaseAmplitudeCorrelation(X,nPermutation)
+% %
+% %		%% Inst. phase
+% Xfc= hilbert(X')';
+% Xfh=angle(Xfc);
+% amp=abs(Xfc);
+% 
+% ampCorr = corrcoef(amp');
+% ampCorr = ampCorr(1,2);
+% 
+% phi=diff(Xfh);
+% plv=mean(exp(1i*phi),2);
+% 
+% 
+% for pIdx = 1:nPermutation
+%     % compute surrogate
+%     offset 				= randi(size(Xfc,2),1);
+%     Xfc(2,:)			= circshift(Xfc(2,:),offset);
+%     
+%     phi					= diff(angle(Xfc));
+%     plvSurr(pIdx)		= mean(exp(1i*phi),2);
+%     tmp                 = corrcoef(abs(Xfc)');
+%     ampCorrSurr(pIdx)   = tmp(1,2);
+% end
+% end
+% 
+% function data = preproc(data,iChannels,chFlag,trialLength)
+% %	preproc
+% %	data = preproc() split data in trials
+% %
+% 
+% if any(ismember(find(chFlag==-1),iChannels))
+%     data = [];
+%     return
+% end
+% 
+% cfg = [];
+% % at this point the recordings are just a single
+% % continuos stream of samples.
+% begRecording = min(data.time{1});
+% endRecording = max(data.time{1});
+% 
+% fs 			 = 1/mean(diff(data.time{1}));
+% 
+% % we should split this in ntrials of 3s
+% totLength       = endRecording-begRecording;
+% nTrials         = floor(totLength/trialLength);
+% offset          = totLength/2;
+% analysisWindow	= nTrials*trialLength;
+% startTime 		= offset - analysisWindow/2;
+% endTime   		= analysisWindow/2+offset;;
+% 
+% 
+% trials			= cat(2,(startTime:trialLength:endTime-trialLength)',...
+%     (startTime+trialLength:trialLength:endTime)',zeros(nTrials,1));
+% 
+% trials			= floor(trials*fs)+1;
+% cfg.trl			= trials;
+% 
+% data            = ft_redefinetrial(cfg,data);
+% 
+% cfg 						= [];
+% cfg.continuous  = 'yes';
+% cfg.channel		=	data.label(iChannels);
+% cfg.detrend		= 'yes';
+% data 			= ft_preprocessing(cfg,data);
+% 
+% end
 
 
-trials					= cat(2,(startTime:trialLength:endTime-trialLength)',...
-    (startTime+trialLength:trialLength:endTime)',zeros(nTrials,1));
-
-trials					= floor(trials*fs)+1;
-cfg.trl					= trials;
-
-data						= ft_redefinetrial(cfg,data);
-
-cfg 						= [];
-cfg.continuous  = 'yes';
-cfg.channel			=	data.label(iChannels);
-cfg.detrend			= 'yes';
-data 						= ft_preprocessing(cfg,data);
-
-end
-
-
-function [dataFiltered, f] = narrowBandFiltering(data,nFilters,iChannels,chFlag,trialLength)
-% Description
-%	DATAFILTERED = () Long description
-%
-
-% nominal frequency and central frequency
-fn = 2;
-% band-flat top and band pass width
-wb = 0.25;
-% stop band
-ws = 2;
-% multiplier
-m = sqrt(2);
-
-f = zeros(nFilters,1);
-for fIdx = 1:nFilters
-    
-    passBandLp = fn + (wb * fn)/2;
-    passBandHp = fn - (wb * fn)/2;
-    stopBandLp = fn * ws;
-    stopBandHp = fn / ws;
-    f(fIdx) = fn;
-    fn = fn * m;
-    
-    cfg.lpfreq = passBandLp;
-    cfg.hpfreq = passBandHp;
-    cfg.lpfilter = 'yes';
-    cfg.hpfilter = 'yes';
-    cfg.lpfiltertype = 'but';
-    cfg.hpfiltertype = 'but';
-    cfg.lpfiltdir = 'twopass';
-    cfg.hpfiltdir = 'twopass';
-    data = ft_preprocessing(cfg,data);
-    dataFiltered(fIdx) = preproc(data,iChannels,chFlag,trialLength);
-    
-end
-
-
-end
+% function [dataFiltered, f] = narrowBandFiltering(data,nFilters,iChannels,chFlag,trialLength)
+% % Description
+% %	DATAFILTERED = () Long description
+% %
+% 
+% % nominal frequency and central frequency
+% fn = 2;
+% % band-flat top and band pass width
+% wb = 0.25;
+% % stop band
+% ws = 2;
+% % multiplier
+% m = sqrt(2);
+% 
+% f = zeros(nFilters,1);
+% for fIdx = 1:nFilters
+%     
+%     passBandLp = fn + (wb * fn)/2;
+%     passBandHp = fn - (wb * fn)/2;
+%     stopBandLp = fn * ws;
+%     stopBandHp = fn / ws;
+%     f(fIdx) = fn;
+%     fn = fn * m;
+%     
+%     cfg.lpfreq = passBandLp;
+%     cfg.hpfreq = passBandHp;
+%     cfg.lpfilter = 'yes';
+%     cfg.hpfilter = 'yes';
+%     cfg.lpfiltertype = 'but';
+%     cfg.hpfiltertype = 'but';
+%     cfg.lpfiltdir = 'twopass';
+%     cfg.hpfiltdir = 'twopass';
+%     data = ft_preprocessing(cfg,data);
+%     dataFiltered(fIdx) = preproc(data,iChannels,chFlag,trialLength);
+%     
+% end
+% 
+% 
+% end
