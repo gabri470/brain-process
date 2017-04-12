@@ -87,6 +87,10 @@ nPermutation = 10;
 %nFilters     = 12;
 alpha		 = 0.05;
 
+standingData = zeros(nSubjects,4);
+restingData = zeros(nSubjects,4);
+walkingData = zeros(nSubjects,4);
+
 for subjIdx = 1:nSubjects
     % for each subject separately we pick standing condition
     subjectMask 		= ~cellfun(@isempty,regexp({sInputs.SubjectName},subjectNames{subjIdx}));
@@ -120,10 +124,10 @@ for subjIdx = 1:nSubjects
             'ChannelFlag'),'ChannelFlag');
         
         
-        [restIdxStruct,~,~]  = out_fieldtrip_data(sInputs(restingFileIdx(restIdx)).FileName);
+        [restIdxStruct,~,~] = out_fieldtrip_data(sInputs(restingFileIdx(restIdx)).FileName);
         restChannels 		= in_bst_channel(sInputs(restingFileIdx(restIdx)).ChannelFile);
         restiChannels		= channel_find(restChannels.Channel,'SEEG');
-        restIdxStruct  	= preproc(restIdxStruct,restiChannels,restChFlag,3);
+        restIdxStruct       = preproc(restIdxStruct,restiChannels,restChFlag,3);
         
         if isempty(restIdxStruct)
             continue
@@ -141,8 +145,7 @@ for subjIdx = 1:nSubjects
     restingStruct = rmfield(restingStruct,'sampleinfo');
     restingStruct.hdr.nTrials = numel(restingStruct.trial);
     restCoh	= computeCoherence(restingStruct,restingStruct.label);
-    %			filteredWalkingStruct = narrowBandFiltering(walkingStruct, nFilters);
-    %			[walkPlv, f] = computePhaseMetric(filteredWalkingStruct,walkingStruct.label);
+
     
     [~,restPvalue, restAvgSurr,~] = runPermutationTest(restCoh,restingStruct,nPermutation,alpha);
     
@@ -158,7 +161,7 @@ for subjIdx = 1:nSubjects
         walkiChannels	= channel_find(walkChannels.Channel,'SEEG');
         
         walkIdxStruct = preproc(walkIdxStruct,walkiChannels,walkChFlag,3);
-        %					filteredWalkingStruct = narrowBandFiltering(walkingStruct, nFilters,walkiChannels,walkChFlag,3);
+
         if isempty(walkIdxStruct)
             continue
         end
@@ -175,10 +178,31 @@ for subjIdx = 1:nSubjects
     walkingStruct = rmfield(walkingStruct,'sampleinfo');
     walkingStruct.hdr.nTrials = numel(walkingStruct.trial);
     walkCoh	= computeCoherence(walkingStruct,walkingStruct.label);
-    %			[walkPlv, f] = computePhaseMetric(filteredWalkingStruct,walkingStruct.label);
     [~,walkPvalue, walkAvgSurr,~] = runPermutationTest(walkCoh,walkingStruct,nPermutation,alpha);
     
+    f = 1:.5:60;
     
+    thetaBand = f >= 4  & f < 8;
+    alphaBand = f >= 8  & f < 13;
+    betaBand  = f >= 13 & f < 30;
+    gammaBand = f >= 30 & f < 60;
+    
+    standingData(subjIdx,1) = mean(abs(standCoh.cohspctrm(thetaBand)));
+    standingData(subjIdx,2) = mean(abs(standCoh.cohspctrm(alphaBand)));
+    standingData(subjIdx,3) = mean(abs(standCoh.cohspctrm(betaBand)));
+    standingData(subjIdx,4) = mean(abs(standCoh.cohspctrm(gammaBand)));
+    
+    restingData(subjIdx,1) = mean(abs(restCoh.cohspctrm(thetaBand)));
+    restingData(subjIdx,2) = mean(abs(restCoh.cohspctrm(alphaBand)));
+    restingData(subjIdx,3) = mean(abs(restCoh.cohspctrm(betaBand)));
+    restingData(subjIdx,4) = mean(abs(restCoh.cohspctrm(gammaBand)));
+    
+    walkingData(subjIdx,1) = mean(abs(walkCoh.cohspctrm(thetaBand)));
+    walkingData(subjIdx,2) = mean(abs(walkCoh.cohspctrm(alphaBand)));
+    walkingData(subjIdx,3) = mean(abs(walkCoh.cohspctrm(betaBand)));
+    walkingData(subjIdx,4) = mean(abs(walkCoh.cohspctrm(gammaBand)));
+    
+   
     ax1 = subplot(2,4,subjIdx,'NextPlot','add');
     plot(restCoh.freq,abs(restCoh.cohspctrm),'LineWidth',1);
     plot(standCoh.freq,abs(standCoh.cohspctrm),'LineWidth',1);
@@ -196,9 +220,7 @@ for subjIdx = 1:nSubjects
     standCoh.cohspctrm( standPvalue >= 0.05 ) = NaN;
     plot(standCoh.freq,abs(standCoh.cohspctrm),'LineWidth',2);
     plot(standCoh.freq,abs(standAvgSurr),'--');
-    %		  plot(restCoh.freq,abs(imag(restCoh.cohspctrm)),'LineWidth',2);
-    %		  plot(walkCoh.freq,abs(imag(walkCoh.cohspctrm)),'LineWidth',2);
-    %		  legend({'rest','stand','walk'});
+
     xlim([6 60]);
     ylim([0 1]);
     title(subjectNames(subjIdx));
@@ -207,13 +229,12 @@ for subjIdx = 1:nSubjects
     set(ax2,'Parent',f2);
     
     ax3 = subplot(2,4,subjIdx,'NextPlot','add');
-    %		  plot(restCoh.freq,abs(imag(restCoh.cohspctrm)),'LineWidth',2);
-    %		  plot(standCoh.freq,abs(imag(standCoh.cohspctrm)),'LineWidth',2);
+
     plot(walkCoh.freq,abs(walkCoh.cohspctrm),'LineWidth',1);
     walkCoh.cohspctrm( walkPvalue >= 0.05) = NaN;
     plot(walkCoh.freq,abs(walkCoh.cohspctrm),'LineWidth',2);
     plot(walkCoh.freq,abs(walkAvgSurr),'--');
-    %		  legend({'rest','stand','walk'});
+
     xlim([6 60]);
     ylim([0 1]);
     title(subjectNames(subjIdx));
@@ -226,9 +247,7 @@ for subjIdx = 1:nSubjects
     restCoh.cohspctrm( restPvalue >= 0.05 ) = NaN;
     plot(restCoh.freq,abs(restCoh.cohspctrm),'LineWidth',2);
     plot(restCoh.freq,abs(restAvgSurr),'--');
-    %		  plot(standCoh.freq,abs(standCoh.cohspctrm),'LineWidth',2);
-    %		  plot(walkCoh.freq,abs(walkCoh.cohspctrm),'LineWidth',2);
-    %     legend({'rest','stand','walk'});
+
     xlim([6 60]);
     ylim([0 1]);
     title(subjectNames(subjIdx));
@@ -238,10 +257,23 @@ for subjIdx = 1:nSubjects
     
 end % subject loop
 %
-print(f1,'/home/gabri/Dropbox/Isaias_group/walking/all.ps','-dpsc2');
-print(f2,'/home/gabri/Dropbox/Isaias_group/walking/standing.ps','-dpsc2 ');
-print(f3,'/home/gabri/Dropbox/Isaias_group/walking/walking.ps','-dpsc2 ');
-print(f4,'/home/gabri/Dropbox/Isaias_group/walking/resting.ps','-dpsc2 ');
+% print(f1,'/home/gabri/Dropbox/Isaias_group/walking/all.ps','-dpsc2');
+% print(f2,'/home/gabri/Dropbox/Isaias_group/walking/standing.ps','-dpsc2 ');
+% print(f3,'/home/gabri/Dropbox/Isaias_group/walking/walking.ps','-dpsc2 ');
+% print(f4,'/home/gabri/Dropbox/Isaias_group/walking/resting.ps','-dpsc2 ');
+
+
+deltaCoh(1,:) = mean( restingData - standingData );
+deltaCoh(2,:) = mean( restingData - walkingData );
+deltaCoh(3,:) = mean( standingData - walkingData);
+
+
+
+figure, bar(deltaCoh);
+legend({'theta','alpha','beta','gamma'})
+set(gca,'XTick',[1 2 3],'XTickLabel',{'rest-stand','rest-walk','stand-walk'});
+
+
 
 clearvars walkData standData
 end % function
@@ -343,6 +375,49 @@ coh 		= ft_connectivityanalysis(cfg,freq);
 
 end
 
+function data = preproc(data,iChannels,chFlag,trialLength)
+%	preproc
+%	data = preproc() split data in trials
+%
+
+if any(ismember(find(chFlag==-1),iChannels))
+    data = [];
+    return
+end
+
+cfg = [];
+% at this point the recordings are just a single
+% continuos stream of samples.
+begRecording = min(data.time{1});
+endRecording = max(data.time{1});
+
+fs 			 = 1/mean(diff(data.time{1}));
+
+% we should split this in ntrials of 3s
+totLength       = endRecording-begRecording;
+nTrials         = floor(totLength/trialLength);
+offset          = totLength/2;
+analysisWindow	= nTrials*trialLength;
+startTime 		= offset - analysisWindow/2;
+endTime   		= analysisWindow/2+offset;;
+
+
+trials			= cat(2,(startTime:trialLength:endTime-trialLength)',...
+    (startTime+trialLength:trialLength:endTime)',zeros(nTrials,1));
+
+trials			= floor(trials*fs)+1;
+cfg.trl			= trials;
+
+data            = ft_redefinetrial(cfg,data);
+
+cfg 						= [];
+cfg.continuous  = 'yes';
+cfg.channel		=	data.label(iChannels);
+cfg.detrend		= 'yes';
+data 			= ft_preprocessing(cfg,data);
+
+end
+
 % function [pTE, plv, f, nPLV] = computePhaseMetric(data,channelNames,nPermutation)
 % % Description
 % %	[PTE,PLV, F] = computePhaseMetric(data,channelNames)
@@ -409,48 +484,7 @@ end
 % end
 % end
 % 
-% function data = preproc(data,iChannels,chFlag,trialLength)
-% %	preproc
-% %	data = preproc() split data in trials
-% %
-% 
-% if any(ismember(find(chFlag==-1),iChannels))
-%     data = [];
-%     return
-% end
-% 
-% cfg = [];
-% % at this point the recordings are just a single
-% % continuos stream of samples.
-% begRecording = min(data.time{1});
-% endRecording = max(data.time{1});
-% 
-% fs 			 = 1/mean(diff(data.time{1}));
-% 
-% % we should split this in ntrials of 3s
-% totLength       = endRecording-begRecording;
-% nTrials         = floor(totLength/trialLength);
-% offset          = totLength/2;
-% analysisWindow	= nTrials*trialLength;
-% startTime 		= offset - analysisWindow/2;
-% endTime   		= analysisWindow/2+offset;;
-% 
-% 
-% trials			= cat(2,(startTime:trialLength:endTime-trialLength)',...
-%     (startTime+trialLength:trialLength:endTime)',zeros(nTrials,1));
-% 
-% trials			= floor(trials*fs)+1;
-% cfg.trl			= trials;
-% 
-% data            = ft_redefinetrial(cfg,data);
-% 
-% cfg 						= [];
-% cfg.continuous  = 'yes';
-% cfg.channel		=	data.label(iChannels);
-% cfg.detrend		= 'yes';
-% data 			= ft_preprocessing(cfg,data);
-% 
-% end
+
 
 
 % function [dataFiltered, f] = narrowBandFiltering(data,nFilters,iChannels,chFlag,trialLength)

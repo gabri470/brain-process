@@ -70,17 +70,13 @@ walkingConMask 	= ~cellfun(@isempty,regexp(conditionStrings,'(w|W)alking'));
 restingConMask 	= ~cellfun(@isempty,regexp(conditionStrings,'(r|R)esting'));
 offConMask 		= ~cellfun(@isempty,regexpi(conditionStrings,'off'));
 
+% order patients in descending order based on dopamine-deplition
+patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
+[~,subjOrder] = ismember(patientsOrder,subjectNames);
+
 f1 = figure('papertype','a4','paperorientation',...
     'portrait','visible','on');
 
-f2 = figure('papertype','a4','paperorientation',...
-    'portrait','Visible','on');
-
-f3 = figure('papertype','a4','paperorientation',...
-    'portrait','Visible','on');
-
-f4 = figure('papertype','a4','paperorientation',...
-    'portrait','Visible','on');
 
 OutputFiles = {};
 
@@ -89,9 +85,15 @@ nFilters	 = 13;
 alpha		 = 0.05;
 trialLength  = 3;
 
+standingData = cell(nSubjects,1);
+walkingData = cell(nSubjects,1);
+restingData = cell(nSubjects,1);
+plotIdx = 1;
+
 for subjIdx = 1:nSubjects
+    
     % for each subject separately we pick standing condition
-    subjectMask 		= ~cellfun(@isempty,regexp({sInputs.SubjectName},subjectNames{subjIdx}));
+    subjectMask 	= ~cellfun(@isempty,regexp({sInputs.SubjectName},subjectNames{subjIdx}));
     
     standingFileIdx = find(subjectMask & standingConMask & offConMask);
     walkingFileIdx 	= find(subjectMask & walkingConMask & offConMask);
@@ -105,15 +107,20 @@ for subjIdx = 1:nSubjects
         standChannels 	= in_bst_channel(sInputs(standingFileIdx).ChannelFile);
         standiChannels	= channel_find( standChannels.Channel,'SEEG');    
 
-        % we should here quantify the STN coherence    
         [filteredstandingStruct,f] = narrowBandFiltering(standingStruct, nFilters,standiChannels,standChFlag,trialLength);
         % [plv, f, nPLV] = computePhaseMetric
         [standPlv,standnPlv, standAmp] = computePhaseMetric(filteredstandingStruct,standingStruct.label,nPermutation);
+        
     else
         standPlv = zeros(1,nFilters);
         standnPlv = zeros(1,nFilters);
         standAmp = zeros(1,nFilters);
     end
+    
+    standingData{plotIdx,1} = standPlv;
+    standingData{plotIdx,2} = standAmp;
+    standingData{plotIdx,3} = standnPlv;
+        
     if ~isempty(restingFileIdx)
         restingStruct = struct('dimord',[],'trial',[],'time',[],'label',[],'elec',[]);
 
@@ -139,20 +146,23 @@ for subjIdx = 1:nSubjects
             else
                 for fIdx = 1:nFilters
                     restingStruct(fIdx).trial = [restingStruct(fIdx).trial filteredrestingStruct(fIdx).trial];
-                    restingStruct(fIdx).time  = [restingStruct(fIdx).time filteredrestingStruct(fIdx).time];
-                    % compute the STN coherence during resting
-                    % restingStruct(fIdx) = rmfield(restingStruct(fIdx),'sampleinfo');
+                    restingStruct(fIdx).time  = [restingStruct(fIdx).time filteredrestingStruct(fIdx).time];                   
                     restingStruct(fIdx).hdr.nTrials = numel(restingStruct(fIdx).trial);
                 end
             end
         end
 
         [restPlv, restnPlv, restAmp] = computePhaseMetric(restingStruct,restIdxStruct.label,nPermutation);
+
     else
         restPlv = zeros(1,nFilters);
         restnPlv = zeros(1,nFilters);
         restAmp = zeros(1,nFilters);
     end
+    restingData{plotIdx,1} = restPlv;
+    restingData{plotIdx,2} = restAmp;
+    restingData{plotIdx,3} = restnPlv;
+    
     if ~isempty(walkingFileIdx)
         walkingStruct   = struct('dimord',[],'trial',[],'time',[],'label',[],'elec',[]);
 
@@ -187,89 +197,180 @@ for subjIdx = 1:nSubjects
 
 
         [walkPlv, walknPlv,walkAmp] = computePhaseMetric(walkingStruct,walkIdxStruct.label,nPermutation);
+
+        
     else
         walkPlv = zeros(1,nFilters);
         walknPlv = zeros(1,nFilters);
         walkAmp = zeros(1,nFilters);
     end
     
-    ax1 = subplot(2,4,subjIdx,'NextPlot','add');
-    plot(f,abs(restPlv),'LineWidth',1);
-    plot(f,abs(standPlv),'LineWidth',1);
-    plot(f,abs(walkPlv),'LineWidth',1);
-    plot(f,repmat(2.42,size(f)),'--');
-    legend({'rest','stand','walk','C.I'});
+    walkingData{plotIdx,1} = walkPlv;
+    walkingData{plotIdx,2} = walkAmp;
+    walkingData{plotIdx,3} = walknPlv;
+    
+    ax1 = subplot(nSubjects,4,4*(plotIdx-1)+1,'NextPlot','add');
+    plot(f,abs(restPlv),'LineWidth',1,'Color',[0 109 219]./255);
+    plot(f,abs(standPlv),'LineWidth',1,'Color',[255 109 182]./255);
+    plot(f,abs(walkPlv),'LineWidth',1,'Color',[76 255 36]./255);
+    %legend({'rest','stand','walk','C.I'});
     xlim([6 60]);
-    ylim([0 1]);
-    title(subjectNames(subjIdx));
+    ylim([0 0.5]);
+
     xlabel('Hz');
     ylabel('PLV');
     set(ax1,'Parent',f1);
     
-    ax2 = subplot(2,4,subjIdx,'NextPlot','add');
-    plot(f,abs(imag(restPlv)),'LineWidth',1);
-    plot(f,abs(imag(standPlv)),'LineWidth',1);
-    plot(f,abs(imag(walkPlv)),'LineWidth',1);
-    legend({'rest','stand','walk'});
+    ax2 = subplot(nSubjects,4,4*(plotIdx-1)+2,'NextPlot','add');
+    plot(f,abs(imag(restPlv)),'LineWidth',1,'Color',[0 109 219]./255);
+    plot(f,abs(imag(standPlv)),'LineWidth',1,'Color',[255 109 182]./255);
+    plot(f,abs(imag(walkPlv)),'LineWidth',1,'Color',[76 255 36]./255);
+    %legend({'rest','stand','walk'});
     xlim([6 60]);
     ylim([0 0.5]);
-    title(subjectNames(subjIdx));
+
     xlabel('Hz');
     ylabel('iPLV');
-    set(ax2,'Parent',f2);
+    set(ax2,'Parent',f1);
     
-    ax3 = subplot(2,4,subjIdx,'NextPlot','add');
-    plot(f,abs(restAmp),'LineWidth',1);
-    plot(f,abs(standAmp),'LineWidth',1);
-    plot(f,abs(walkAmp),'LineWidth',1);
+    ax3 = subplot(nSubjects,4,4*(plotIdx-1)+3,'NextPlot','add');
+    plot(f,abs(restAmp),'LineWidth',1,'Color',[0 109 219]./255);
+    plot(f,abs(standAmp),'LineWidth',1,'Color',[255 109 182]./255);
+    plot(f,abs(walkAmp),'LineWidth',1,'Color',[76 255 36]./255);
     xlim([6 60]);
     ylim([0 0.5]);
-    title(subjectNames(subjIdx));
+
     xlabel('Hz');
     ylabel('AAc');
-    set(ax3,'Parent',f3);
+    set(ax3,'Parent',f1);
     
-    ax4 = subplot(2,4,subjIdx,'NextPlot','add');
-    plot(f,abs(restnPlv),'LineWidth',1);
-    plot(f,abs(standnPlv),'LineWidth',1);
-    plot(f,abs(walknPlv),'LineWidth',1);
+    ax4 = subplot(nSubjects,4,4*(plotIdx-1)+4,'NextPlot','add');
+    plot(f,abs(restnPlv),'LineWidth',1,'Color',[0 109 219]./255);
+    plot(f,abs(standnPlv),'LineWidth',1,'Color',[255 109 182]./255);
+    plot(f,abs(walknPlv),'LineWidth',1,'Color',[76 255 36]./255);
     plot(f,repmat(2.42,size(f)),'--');
-    legend({'rest','stand','walk','C.I'});
+    %legend({'rest','stand','walk','C.I'});
     xlim([6 60]);
     %ylim([0 1]);
-    title(subjectNames(subjIdx));
+    
     xlabel('Hz');
     ylabel('nPLV');
-    set(ax4,'Parent',f4);
+    set(ax4,'Parent',f1);
+    drawnow
+    plotIdx = plotIdx + 1;
     
 end % subject loop
-%
-% print(f1,'/home/gabri/Dropbox/Isaias_group/walking/plv.png','-dpng');
-% print(f2,'/home/gabri/Dropbox/Isaias_group/walking/iplv.png','-dpng ');
-% print(f3,'/home/gabri/Dropbox/Isaias_group/walking/aac.png','-dpng ');
-% print(f4,'/home/gabri/Dropbox/Isaias_group/walking/resting.ps','-dpsc2 ');
 
-clearvars walkData standData
+% restingData, walkingData and standingData contain cPLV CC and nPLV for all subjects
+% in the form of nSubjects x 3 cells of nFreq x 1 elements 
+
+% reformat data in a 3D matrix with nSubjects x Freq x metric
+% first concat all elements in nFreq x ( nSubjects x metric )
+restData = reshape(cat(2,restingData{:}),[nFilters nSubjects 3]);
+walkData = reshape(cat(2,walkingData{:}),[nFilters nSubjects 3]);
+standData = reshape(cat(2,standingData{:}),[nFilters nSubjects 3]);
+
+% avgRest = squeeze(mean(abs(restData(:,:,1)),2));
+% avgStand = squeeze(mean(abs(standData(:,:,1)),2));
+% avgWalk = squeeze(mean(abs(walkData(:,:,1)),2));
+
+[confLimRest, avgRest]   = myBootstrap(abs(restData),nSubjects,10);
+[confLimWalk, avgWalk]   = myBootstrap(abs(walkData),nSubjects,10);
+[confLimStand, avgStand] = myBootstrap(abs(standData),nSubjects,10);
+
+figure('papertype','a4',...
+    'paperorientation',...
+    'portrait','Visible','on');
+
+subplot(1,3,1,'NextPlot','add')
+plot(f,avgRest(:,1,1),'LineWidth',1,'Color',[0 109 219]./255);
+plot(f,avgStand(:,1,1),'LineWidth',1,'Color',[255 109 182]./255);
+plot(f,avgWalk(:,1,1),'LineWidth',1,'Color',[76 255 36]./255);
+legend({'rest' 'stand' 'walk'})
+
+fill_between(f,confLimRest(1,:,1),confLimRest(2,:,1),f,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(f,confLimStand(1,:,1),confLimStand(2,:,1),f,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(f,confLimWalk(1,:,1),confLimWalk(2,:,1),f,'FaceColor',[76 255 36]./255,'FaceAlpha',0.2,'EdgeColor','None');
+xlabel('Freq. (Hz)');
+ylabel('PLV');
+xlim([0 60]);
+
+subplot(1,3,2,'NextPlot','add')
+plot(f,avgRest(:,1,2),'LineWidth',1,'Color',[0 109 219]./255);
+plot(f,avgStand(:,1,2),'LineWidth',1,'Color',[255 109 182]./255);
+plot(f,avgWalk(:,1,2),'LineWidth',1,'Color',[76 255 36]./255);
+legend({'rest' 'stand' 'walk'})
+
+fill_between(f,confLimRest(1,:,2),confLimRest(2,:,2),f,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(f,confLimStand(1,:,2),confLimStand(2,:,2),f,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(f,confLimWalk(1,:,2),confLimWalk(2,:,2),f,'FaceColor',[76 255 36]./255,'FaceAlpha',0.2,'EdgeColor','None');
+xlabel('Freq. (Hz)');
+ylabel('CC');
+xlim([0 60]);
+
+subplot(1,3,3,'NextPlot','add')
+plot(f,avgRest(:,1,3),'LineWidth',1,'Color',[0 109 219]./255);
+plot(f,avgStand(:,1,3),'LineWidth',1,'Color',[255 109 182]./255);
+plot(f,avgWalk(:,1,3),'LineWidth',1,'Color',[76 255 36]./255);
+plot(f,repmat(2.42,size(f)),'--');
+legend({'rest' 'stand' 'walk'})
+
+fill_between(f,confLimRest(1,:,3),confLimRest(2,:,3),f,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(f,confLimStand(1,:,3),confLimStand(2,:,3),f,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(f,confLimWalk(1,:,3),confLimWalk(2,:,3),f,'FaceColor',[76 255 36]./255,'FaceAlpha',0.2,'EdgeColor','None');
+xlabel('Freq. (Hz)');
+ylabel('nPLV');
+xlim([0 60]);
+
 end % function
 
 
-function pvalue = fdrCorrection(pvalue, alpha)
-%FDRCORRECTION Description
-%	PVALUE  = FDRCORRECTION() Long description
-%
+function [confLimit,dataMean] = myBootstrap(data,nSubject,nBootstraps)
 
-tmpPvalue 	= sort(pvalue(:));
-N 			= numel(pvalue);
-FDR 		= alpha.*(1:N)./N;
-thr 		= FDR(find(tmpPvalue <= FDR',1,'last'));
-
-if isempty(thr)
-    pvalue  = ones(size(thr));
-else
-    pvalue(pvalue >= thr) = 1;
+    % data matrix has nSubjects x f x metric
+    % bootstrap the C.L. for mean
+    bootstrapIndexes = randi(nSubject,nBootstraps);
+    [nFilters,~,nMetric] = size(data);
+    
+    %dataMean will be a 13 x 1 x 3
+    dataMean = mean(data,2);
+    
+    % currBootstraps will contain nBootstraps x nStn x f
+    currBootstraps = nan(nBootstraps,nFilters,nMetric);
+    for idx = 1:nBootstraps
+        currBootstraps(idx,:,:) = squeeze(mean(data(:,bootstrapIndexes(idx),:),2));
+    end
+    
+    % confLimit will contain [UB LB] x nStn x f
+    % dataMean is 1 x 2 x f
+    % thus we replicate on the first dim
+%     A = repmat(dataMean,1,2,1);
+    % currBootstrap after mean should be 1 x 2 x f
+    % thus we replicate on the first dim
+    B = prctile(currBootstraps,[5 95]);
+    % coeff correction is 2 x 2 x f
+    % C = repmat([1;-1],[1,2,60]);
+    confLimit = B;
 end
 
-end
+
+% function pvalue = fdrCorrection(pvalue, alpha)
+% %FDRCORRECTION Description
+% %	PVALUE  = FDRCORRECTION() Long description
+% %
+% 
+% tmpPvalue 	= sort(pvalue(:));
+% N 			= numel(pvalue);
+% FDR 		= alpha.*(1:N)./N;
+% thr 		= FDR(find(tmpPvalue <= FDR',1,'last'));
+% 
+% if isempty(thr)
+%     pvalue  = ones(size(thr));
+% else
+%     pvalue(pvalue >= thr) = 1;
+% end
+% 
+% end
 
 
 

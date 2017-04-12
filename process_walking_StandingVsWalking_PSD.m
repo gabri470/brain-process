@@ -59,6 +59,9 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
     nSubjects = numel(subjectNames);
 
     mostAffSides = mostAffSides(ismember(nameSubjects,subjectNames));
+    
+    patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
+	[~,subjOrder] = ismember(patientsOrder,subjectNames);
 
     % we need to find files that have to be processed and group
     % them for subjects and conditions
@@ -77,8 +80,10 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
     standingData = cell(nSubjects,2);
     walkingData = cell(nSubjects,2);
     restingData = cell(nSubjects,2);
+    plotIdx = 1;
 
-    for subjIdx = 1:nSubjects
+    for subjIdx = subjOrder
+        
         % for each subject separately we pick standing condition
         subjectMask 		= ~cellfun(@isempty,regexp({sInputs.SubjectName},subjectNames{subjIdx}));
 
@@ -154,9 +159,11 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 
         end % walking trial loop
         walkingData(subjIdx,:) = [{walkSpectrum(1,:,:)},{walkSpectrum(2,:,:)}];
+        
+        
 
-   
-        subplot(nSubjects,2,2*(subjIdx-1)+1,'NextPlot','add')
+  
+        subplot(nSubjects,2,2*(plotIdx-1)+1,'NextPlot','add')
         plot(f,standSpectrum(chOrder(1),:,:),'LineWidth',2,'Color',[255 109 182]./255);
         plot(f,squeeze(mean(restSpectrum(chOrder(1),:,:),3)),'LineWidth',2,'Color',[0 109 219]./255);
         plot(f,mean(walkSpectrum(chOrder(1),:,:),3),'LineWidth',2,'Color',[76 255 36]./255);
@@ -165,7 +172,7 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
         xlabel('Freq. Hz');
         ylabel('norm. pow');
         
-        subplot(nSubjects,2,2*(subjIdx-1)+2,'NextPlot','add')
+        subplot(nSubjects,2,2*(plotIdx-1)+2,'NextPlot','add')
         plot(f,standSpectrum(chOrder(2),:,:),'LineWidth',2,'Color',[255 109 182]./255);
         plot(f,squeeze(mean(restSpectrum(chOrder(2),:,:),3)),'LineWidth',2,'Color',[0 109 219]./255);
         plot(f,mean(walkSpectrum(chOrder(2),:,:),3),'LineWidth',2,'Color',[76 255 36]./255);
@@ -175,6 +182,8 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
         
         xlabel('Freq. Hz');
         ylabel('norm. pow');
+        
+        plotIdx = plotIdx + 1;
 
 
 
