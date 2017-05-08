@@ -91,6 +91,11 @@ standingData = zeros(nSubjects,4);
 restingData = zeros(nSubjects,4);
 walkingData = zeros(nSubjects,4);
 
+grpRestingData = zeros(nSubjects,119);
+grpStandingData= zeros(nSubjects,119);
+grpWalkingData = zeros(nSubjects,119);
+    
+
 for subjIdx = 1:nSubjects
     % for each subject separately we pick standing condition
     subjectMask 		= ~cellfun(@isempty,regexp({sInputs.SubjectName},subjectNames{subjIdx}));
@@ -202,6 +207,9 @@ for subjIdx = 1:nSubjects
     walkingData(subjIdx,3) = mean(abs(walkCoh.cohspctrm(betaBand)));
     walkingData(subjIdx,4) = mean(abs(walkCoh.cohspctrm(gammaBand)));
     
+    grpRestingData(subjIdx,:) = abs(restCoh.cohspctrm);
+    grpStandingData(subjIdx,:)= abs(standCoh.cohspctrm);
+    grpWalkingData(subjIdx,:) = abs(walkCoh.cohspctrm);
    
     ax1 = subplot(2,4,subjIdx,'NextPlot','add');
     plot(restCoh.freq,abs(restCoh.cohspctrm),'LineWidth',1);
@@ -256,28 +264,128 @@ for subjIdx = 1:nSubjects
     set(ax4,'Parent',f4);
     
 end % subject loop
-%
-% print(f1,'/home/gabri/Dropbox/Isaias_group/walking/all.ps','-dpsc2');
-% print(f2,'/home/gabri/Dropbox/Isaias_group/walking/standing.ps','-dpsc2 ');
-% print(f3,'/home/gabri/Dropbox/Isaias_group/walking/walking.ps','-dpsc2 ');
-% print(f4,'/home/gabri/Dropbox/Isaias_group/walking/resting.ps','-dpsc2 ');
 
+% mean in bands as PLV and CC to have similar freq resolution
+fn = 2;
+% band-flat top and band pass width
+wb = 0.5;
+% stop band
+ws = 2;
+% multiplier
+m = sqrt(2);
+passBands = [];
+fBands = zeros(11,1);
+f = 1:.5:60;
+for fIdx = 1:11
+    
+    passBands(fIdx,:) = [fn-(wb*fn)/2  fn+(wb * fn)/2];
+    fBands(fIdx) = fn;
+    fn = fn * m;
+end
+[~, hpMask] = meshgrid(f,passBands(:,1));
+[fMask, lpMask] = meshgrid(f,passBands(:,2));
+passBandsMask = (fMask >= hpMask & fMask <= lpMask);
 
-deltaCoh(1,:) = mean( restingData - standingData );
-deltaCoh(2,:) = mean( restingData - walkingData );
-deltaCoh(3,:) = mean( standingData - walkingData);
+grpAvgRestingData = avgInfBands(grpRestingData,passBandsMask);
+grpAvgStandingData = avgInfBands(grpStandingData,passBandsMask);
+grpAvgWalkingData = avgInfBands(grpWalkingData,passBandsMask);
 
+[grpRestingDataCL, grpRestingDataMean] = myBootstrap(grpAvgRestingData,nSubjects,10,passBandsMask);
+[grpWalkingDataCL, grpWalkingDataMean] = myBootstrap(grpAvgWalkingData,nSubjects,10,passBandsMask);
+[grpStandingDataCL, grpStandingDataMean] = myBootstrap(grpAvgStandingData,nSubjects,10,passBandsMask);
 
+figure
+f = fBands;
 
-figure, bar(deltaCoh);
+pRestvsWalk  = mySignRank(grpAvgRestingData-grpAvgWalkingData);
+pRestvsStand = mySignRank(grpAvgRestingData-grpAvgStandingData);
+
+subplot(1,1,1,'NextPlot','add')
+plot(f,grpRestingDataMean,'LineWidth',1,'Color',[0 109 219]./255);
+plot(f,grpStandingDataMean,'LineWidth',1,'Color',[255 109 182]./255);
+plot(f,grpWalkingDataMean,'LineWidth',1,'Color',[76 255 36]./255);
+
+legend({'rest' 'stand' 'walk'});
+plot(f,(pRestvsWalk)*0.5,'r*','MarkerSize',1);
+plot(f,(pRestvsStand)*0.5,'k*','MarkerSize',1);
+fill_between(f,grpRestingDataCL(1,:),grpRestingDataCL(2,:),f,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(f,grpStandingDataCL(1,:),grpStandingDataCL(2,:),f,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(f,grpWalkingDataCL(1,:),grpWalkingDataCL(2,:),f,'FaceColor',[76 255 36]./255,'FaceAlpha',0.2,'EdgeColor','None');
+xlabel('Freq. (Hz)');
+ylabel('Coh');
+xlim([0 60]);
+
+deltaCohMean(1,:) = mean( (restingData - standingData)./standingData );
+deltaCohMean(2,:) = mean( (restingData - walkingData)./walkingData );
+deltaCohMean(3,:) = mean( (standingData - walkingData)./walkingData);
+
+deltaCohStd(1,:) = std( (restingData - standingData)./standingData  )./sqrt(nSubjects);
+deltaCohStd(2,:) = std( (restingData - walkingData)./walkingData )./sqrt(nSubjects);
+deltaCohStd(3,:) = std( (standingData - walkingData)./walkingData )./sqrt(nSubjects);
+
+[nGroups, nBars] = size(deltaCohMean); 
+groupWidth = min(0.8, nBars/(nBars+1.5));
+figure, bar(deltaCohMean);
+hold on
+for i = 1:nBars
+      % magic numbers ... 
+      x = (1:nGroups) - groupWidth/2 + (2*i-1) * groupWidth / (2*nBars);  % Aligning error bar with individual bar
+      errorbar(x, deltaCohMean(:,i), deltaCohStd(:,i), 'k', 'linestyle', 'none');
+
+end
+
 legend({'theta','alpha','beta','gamma'})
 set(gca,'XTick',[1 2 3],'XTickLabel',{'rest-stand','rest-walk','stand-walk'});
 
 
-
-clearvars walkData standData
 end % function
 
+function avg = avgInfBands(data,bandMasks)
+    nSubjects = size(data,1);
+    nFreq = size(bandMasks,1);
+    avg = nan(nSubjects,nFreq);
+    for fIdx = 1:nFreq
+        avg(:,fIdx) = squeeze(mean(data(:,bandMasks(fIdx,:)),2));
+    end
+end
+
+function h = mySignRank(data)
+
+    % data nSubjects x f
+    [~,nFreq] = size(data);
+    p = ones(1,nFreq);
+    h = ones(1,nFreq);
+    
+    for fIdx = 1:nFreq
+        p(fIdx) = signrank(squeeze(data(:,fIdx)));
+    end
+    h(p >= 0.05) = NaN;
+    
+end
+
+function [confLimit,dataMean] = myBootstrap(data,nSubject,nBootstraps,passBands)
+
+    % data matrix has  nSubjects x f
+    % bootstrap the C.L. for mean
+    bootstrapIndexes = randi(nSubject,nBootstraps,nSubject);
+    [nFreq,~] = size(passBands);
+    
+    %dataMean will be a 1 x 13
+    dataMean = mean(data);
+    
+    
+    % currBootstraps will contain nBootstraps x f
+    currBootstraps = nan(nBootstraps,nFreq);
+    for idx = 1:nBootstraps
+       
+        currBootstraps(idx,:) = squeeze(mean(data(bootstrapIndexes(idx,:),:)));
+        
+    end
+    
+    % confLimit will contain [UB LB] x nStn x f
+    confLimit = prctile(currBootstraps,[5 95]);
+        
+end
 
 function [pvalue, unCorrpvalue, avgSurrogate,stdSurrogate] = runPermutationTest(dataObs, data, nPermutation,alpha)
 %RUNPERMUTATIONTEST Description
@@ -318,7 +426,7 @@ end
 avgSurrogate = avgSurrogate ./ nPermutation;
 stdSurrogate = sqrt((avgSurrSquare./nPermutation) - avgSurrogate);
 unCorrpvalue = pvalue;
-pvalue 			 = fdrCorrection(pvalue,alpha);
+pvalue 		 = fdrCorrection(pvalue,alpha);
 
 end
 
@@ -347,9 +455,9 @@ function coh = computeCoherence(data,channelNames)
 cfg = [];
 
 % check if any trial contains NaN values and discard it
-trlMask	= cellfun(@(x) sum(isnan(x),2),data.trial,'uni',false);
+trlMask     = cellfun(@(x) sum(isnan(x),2),data.trial,'uni',false);
 
-trlMask = reshape(cat(1,trlMask{:}),2,numel(data.trial));
+trlMask     = reshape(cat(1,trlMask{:}),2,numel(data.trial));
 
 trlMask     = sum(trlMask,1) == 0;
 cfg.trials	= trlMask;
@@ -418,111 +526,3 @@ data 			= ft_preprocessing(cfg,data);
 
 end
 
-% function [pTE, plv, f, nPLV] = computePhaseMetric(data,channelNames,nPermutation)
-% % Description
-% %	[PTE,PLV, F] = computePhaseMetric(data,channelNames)
-% %
-% chMask	 = ~cellfun(@isempty,regexp(channelNames,'E[0-9]*'));
-% nFilters = numel(data);
-% nTrials  = numel(data(1).trial);
-% plv 	 = complex(zeros(nFilters,nTrials),zeros(nFilters,nTrials));
-% pTE 	 = zeros(nFilters,nTrials);
-% plvSurr	 = complex(zeros(nFilters,nTrials),zeros(nFilters,nTrials));
-% 
-% for fIdx = 1:nFilters
-%     
-%     % check if any trial contains NaN values and discard it
-%     trlMask  = cellfun(@(x) sum(isnan(x),2),data(fIdx).trial,'uni',false);
-%     trlMask  = reshape(cat(1,trlMask{:}),2,numel(data(fIdx).trial));
-%     trlMask	 = sum(trlMask,1) == 0;
-%     nTrials  = numel(trlMask);
-%     trialIndices = 1:nTrials;
-%     
-%     for trialIdx = trialIndices(trlMask)
-%         %			function [pTE, plv, plvSurr] = phaseTE(Xf,lag,nPermutation)
-%         [plv(fIdx,trialIdx),plvSurr(fIdx,trialIdx,:)] = ...
-%             phaseAmplitudeCorrelation(data(fIdx).trial{trialIdx}(chMask,:),nPermutation);
-%         
-%     end
-%     
-% end
-% % get the mean across trials for each filter
-% plv 	= squeeze(mean(plv,2));
-% % get the mean across trials and across permutations for each filter
-% plvSurr = squeeze(mean(mean(plvSurr,2),3));
-% 
-% % this represent p>0.05 confidence limit
-% nPLV 	= plv./plvSurr;
-% 
-% end
-
-% function [plv,plvSurr,ampCorr,ampCorrSurr] = phaseAmplitudeCorrelation(X,nPermutation)
-% % Description
-% %	[PLV,PLVSURR,AMPCORR,AMPCORRSURR] = phaseAmplitudeCorrelation(X,nPermutation)
-% %
-% %		%% Inst. phase
-% Xfc= hilbert(X')';
-% Xfh=angle(Xfc);
-% amp=abs(Xfc);
-% 
-% ampCorr = corrcoef(amp');
-% ampCorr = ampCorr(1,2);
-% 
-% phi=diff(Xfh);
-% plv=mean(exp(1i*phi),2);
-% 
-% 
-% for pIdx = 1:nPermutation
-%     % compute surrogate
-%     offset 				= randi(size(Xfc,2),1);
-%     Xfc(2,:)			= circshift(Xfc(2,:),offset);
-%     
-%     phi					= diff(angle(Xfc));
-%     plvSurr(pIdx)		= mean(exp(1i*phi),2);
-%     tmp                 = corrcoef(abs(Xfc)');
-%     ampCorrSurr(pIdx)   = tmp(1,2);
-% end
-% end
-% 
-
-
-
-% function [dataFiltered, f] = narrowBandFiltering(data,nFilters,iChannels,chFlag,trialLength)
-% % Description
-% %	DATAFILTERED = () Long description
-% %
-% 
-% % nominal frequency and central frequency
-% fn = 2;
-% % band-flat top and band pass width
-% wb = 0.25;
-% % stop band
-% ws = 2;
-% % multiplier
-% m = sqrt(2);
-% 
-% f = zeros(nFilters,1);
-% for fIdx = 1:nFilters
-%     
-%     passBandLp = fn + (wb * fn)/2;
-%     passBandHp = fn - (wb * fn)/2;
-%     stopBandLp = fn * ws;
-%     stopBandHp = fn / ws;
-%     f(fIdx) = fn;
-%     fn = fn * m;
-%     
-%     cfg.lpfreq = passBandLp;
-%     cfg.hpfreq = passBandHp;
-%     cfg.lpfilter = 'yes';
-%     cfg.hpfilter = 'yes';
-%     cfg.lpfiltertype = 'but';
-%     cfg.hpfiltertype = 'but';
-%     cfg.lpfiltdir = 'twopass';
-%     cfg.hpfiltdir = 'twopass';
-%     data = ft_preprocessing(cfg,data);
-%     dataFiltered(fIdx) = preproc(data,iChannels,chFlag,trialLength);
-%     
-% end
-% 
-% 
-% end

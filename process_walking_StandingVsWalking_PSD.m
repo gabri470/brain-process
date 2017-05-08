@@ -159,9 +159,7 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 
         end % walking trial loop
         walkingData(subjIdx,:) = [{walkSpectrum(1,:,:)},{walkSpectrum(2,:,:)}];
-        
-        
-
+ 
   
         subplot(nSubjects,2,2*(plotIdx-1)+1,'NextPlot','add')
         plot(f,standSpectrum(chOrder(1),:,:),'LineWidth',2,'Color',[255 109 182]./255);
@@ -246,7 +244,7 @@ function [confLimit,dataMean] = myBootstrap(data,nSubject,nBootstraps)
 
     % data matrix has nSubjects x nStn (ordered (stn-/stn+) ) x f
     % bootstrap the C.L. for mean
-    bootstrapIndexes = randi(nSubject,nBootstraps);
+    bootstrapIndexes = randi(nSubject,nBootstraps,nSubject);
     
     dataMean = mean(data);
     % currBootstraps will contain nBootstraps x nStn x f
@@ -256,15 +254,11 @@ function [confLimit,dataMean] = myBootstrap(data,nSubject,nBootstraps)
     end
     
     % confLimit will contain [UB LB] x nStn x f
-    % dataMean is 1 x 2 x f
-    % thus we replicate on the first dim
-    A = repmat(dataMean,2,1,1);
+
     % currBootstrap after mean should be 1 x 2 x f
     % thus we replicate on the first dim
-    B = prctile(currBootstraps,[5 95]);
-    % coeff correction is 2 x 2 x f
-    % C = repmat([1;-1],[1,2,60]);
-    confLimit = B;
+    confLimit = prctile(currBootstraps,[5 95]);
+   
 end
 
 

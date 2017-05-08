@@ -27,7 +27,7 @@ end
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
 % Description the process
-sProcess.Comment     = 'Stride Modulation';
+sProcess.Comment     = 'Stride Analyses';
 sProcess.FileTag     = '__';
 sProcess.Category    = 'Custom';
 sProcess.SubGroup    = 'Walking';
@@ -270,7 +270,7 @@ for fileIdx = fileIndices
             finalRaw(2,:) = mixingMatrix * strideRaw(:,2);
             
             tAxis	= referenceTimeVector;
-            tEvAxis = repmat(referenceTimeVector(referenceStance(2:7)),2, 1);
+            tEvAxis = repmat(referenceTimeVector(referenceStance(2:end-1)),2, 1);
             
         else
             %	finalTF 	= dataTF.*1e12;
@@ -341,8 +341,9 @@ colormap(jet(256));
 f3 = figure('papertype','a4','paperorientation','portrait','Visible','on');
 colormap(jet(256));
 %
-highBetaMask = f >= 6 & f <= 19;
-lowBetaMask = f >= 20 & f <= 35;
+
+lowBetaMask = f >= 6 & f <= 19;
+highBetaMask = f >= 20 & f <= 35;
 gammaMask  = f > 35 & f < 80;
 
 patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
@@ -365,10 +366,11 @@ for ii = ord
     [pvalue(2,:,:), unCorrPvalue(2,:,:)] = ...
         runPermutationTest(stnLessAffERSD,...
         stnLessAff,100,referenceStance,method);
-    
+        
+    groupStnMostAffERSD(ii,:,:,:) = stnMostAffERSD;
+    groupStnLessAffERSD(ii,:,:,:) = stnLessAffERSD;
     
     statSignificance = zeros(size(pvalue));
-%     statSignificance(unCorrPvalue < 0.05) = 0.6;
     statSignificance(pvalue < 0.05) = 1;
     
     ax1=subplot(nSubjects,2,2*(plotIdx-1)+1,'NextPlot','add');
@@ -379,6 +381,7 @@ for ii = ord
     xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
     ylim([6 60]);
     set(ax1,'Parent',f2);
+    
     
     ax2=subplot(nSubjects,2,2*(plotIdx-1)+2,'NextPlot','add');
     imagesc(tAxis,f,stnLessAffERSD');
@@ -391,10 +394,7 @@ for ii = ord
     annotation('textbox',[0.05, 0.85-(plotIdx-1)*0.1, 0.1, 0.05],...
         'String',subjectNameOrdered{ii},'LineStyle','None');
     set(gca,'Parent',f2);
-
-%     stnMostAffERSD = stnMostAffERSD .* squeeze(statSignificance(1,:,:));
-%     stnLessAffERSD = stnLessAffERSD .* squeeze(statSignificance(2,:,:));
-    
+   
     ax3=subplot(nSubjects,2,2*(plotIdx-1)+1,'NextPlot','add');
     plot(tAxis,mean(stnMostAffERSD(:,highBetaMask),2),'r');
     plot(tAxis,mean(stnMostAffERSD(:,lowBetaMask),2),'g');
@@ -418,14 +418,109 @@ for ii = ord
     plotIdx = plotIdx + 1;  
     
 end
+
 annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
 annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
 
+%% group level test
+figure,
+grpStnMostHighBeta = squeeze(mean(groupStnMostAffERSD(:,:,highBetaMask),3));
+grpStnLessHighBeta = squeeze(mean(groupStnLessAffERSD(:,:,highBetaMask),3));
+grpStnMostLowBeta  = squeeze(mean(groupStnMostAffERSD(:,:,lowBetaMask),3));
+grpStnLessLowBeta  = squeeze(mean(groupStnLessAffERSD(:,:,lowBetaMask),3));
+grpStnMostGamma    = squeeze(mean(groupStnMostAffERSD(:,:,gammaMask),3));
+grpStnLessGamma    = squeeze(mean(groupStnLessAffERSD(:,:,gammaMask),3));
+
+[grpStnMostHighBetaCL,grpStnMostHighBetaMean] = myBootstrap(grpStnMostHighBeta,nSubjects,10);
+[grpStnLessHighBetaCL,grpStnLessHighBetaMean] = myBootstrap(grpStnLessHighBeta,nSubjects,10);
+[grpStnMostLowBetaCL, grpStnMostLowBetaMean]  = myBootstrap(grpStnMostLowBeta,nSubjects,10);
+[grpStnLessLowBetaCL, grpStnLessLowBetaMean]  = myBootstrap(grpStnLessLowBeta,nSubjects,10);
+[grpStnMostGammaCL, grpStnMostGammaMean]      = myBootstrap(grpStnMostGamma,nSubjects,10);
+[grpStnLessGammaCL, grpStnLessGammaMean]      = myBootstrap(grpStnLessGamma,nSubjects,10);
+
+%% compare STN- and STN+ for LowBeta
+p = mySignrank(grpStnMostLowBeta-grpStnLessLowBeta);
+
+subplot(3,1,1,'NextPlot','add')
+plot(tAxis,grpStnMostLowBetaMean,'Color',[0 109 219]./255);
+plot(tAxis,grpStnLessLowBetaMean,'Color',[255 109 182]./255);
+fill_between(tAxis,grpStnMostLowBetaCL(1,:),grpStnMostLowBetaCL(2,:),tAxis,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(tAxis,grpStnLessLowBetaCL(1,:),grpStnLessLowBetaCL(2,:),tAxis,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
+plot(tAxis,(p<0.05)*0.5,'*');
+plot(tEvAxis,repmat([-2;2],[1 6]),'k--')
+set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc','To'});
+xlim([-0.5 1]);
+ylim([-.5 .5]);
+
+%% compare STN- and STN+ for highBeta
+p = mySignrank(grpStnMostHighBeta-grpStnLessHighBeta);
+
+subplot(3,1,2,'NextPlot','add')
+plot(tAxis,grpStnMostHighBetaMean,'Color',[0 109 219]./255)
+plot(tAxis,grpStnLessHighBetaMean,'Color',[255 109 182]./255);
+legend({'STN-','STN+'});
+plot(tAxis,(p<0.05)*0.5,'*');
+fill_between(tAxis,grpStnMostHighBetaCL(1,:),grpStnMostHighBetaCL(2,:),tAxis,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(tAxis,grpStnLessHighBetaCL(1,:),grpStnLessHighBetaCL(2,:),tAxis,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
+set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc','To'});
+plot(tEvAxis,repmat([-2;2],[1 6]),'k--')
+xlim([-0.5 1]);
+ylim([-.5 .5]);
+
+%% compare STN- and STN+ for gamma
+p = mySignrank(grpStnMostGamma-grpStnLessGamma);
+
+subplot(3,1,3,'NextPlot','add')
+plot(tAxis,grpStnMostGammaMean,'Color',[0 109 219]./255)
+plot(tAxis,grpStnLessGammaMean,'Color',[255 109 182]./255);
+fill_between(tAxis,grpStnMostGammaCL(1,:),grpStnMostGammaCL(2,:),tAxis,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(tAxis,grpStnLessGammaCL(1,:),grpStnLessGammaCL(2,:),tAxis,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
+plot(tEvAxis,repmat([-2;2],[1 6]),'k--')
+plot(tAxis,(p<0.05)*0.5,'*');
+set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc','To'});
+xlim([-0.5 1]);
+ylim([-.5 .5]);
 % fname = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','figs',...
 %     'avgZScoreStrideMod.png');
 
 % print(f2,'-dpng',fname);
 end % function
+function [p] = mySignrank(data)
+    % data subject x time
+    [~,nTimes] = size(data);
+    
+    p = ones(1,nTimes);
+    for ii=1:nTimes
+        p(ii) = signrank(data(:,ii));
+    end
+
+end
+
+function [confLimit,dataMean] = myBootstrap(data,nSubject,nBootstraps)
+
+    % data matrix has nSubjects x t 
+    % bootstrap the C.L. for mean
+    bootstrapIndexes = randi(nSubject,nBootstraps,nSubject);
+    [~,nTimes] = size(data);
+    
+    % compute mean across subjects
+    dataMean = mean(data);
+        
+    % currBootstraps will contain nBootstraps x nStn x f
+    currBootstraps = nan(nBootstraps,nTimes);
+    for idx = 1:nBootstraps
+        currBootstraps(idx,:) = squeeze(mean(data(bootstrapIndexes(idx,:),:)));
+    end
+    
+    % confLimit will contain [UB LB] x nStn x f
+    % dataMean is 1 x 2 x f
+    % thus we replicate on the first dim
+%     A = repmat(dataMean,1,2,1);
+    % currBootstrap after mean should be 1 x 2 x f
+    % thus we replicate on the first dim
+    confLimit = prctile(currBootstraps,[5 95],1);
+
+end
 
 function [pvalue, unCorrpvalue] = runPermutationTest(obsERSD,stnData,nPermutation,referenceStance,method)
 %RUNPERMUTATIONTEST Description
@@ -491,7 +586,7 @@ function stnResult = computeERSD(stnData,referenceStance,method)
 % stnData contains each trial morphed in the
 % => stnData [ n x time x freq ]
 
-% compute the normlization factor concatenating all baseline
+% compute the normalization factor concatenating all baseline
 % and computing the mean across trials
 [n,~,f] = size(stnData);
 tBaseline = referenceStance(1):referenceStance(end);

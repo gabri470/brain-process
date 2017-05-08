@@ -204,6 +204,8 @@ for fileIdx = fileIndices
             continue;
         end
         
+        
+        
         %				[ idx ]
         % (hc_L) *tof_R  hc_R   *tof_L (hc_L)
         %    ^ start-2	   |t0           ^ start + 2 == end stride
@@ -259,6 +261,8 @@ for fileIdx = fileIndices
             normFactor = mean(mean(abs(walkingStruct.TF(:,:,freqMask)).^2,3),2);
             betaMod    = bsxfun(@rdivide,bsxfun(@minus,betaMod,normFactor),normFactor);
             
+            betaMod    = bsxfun(@minus,betaMod,mean(betaMod(:,1:399),2));
+            
             subplot(8,2,2*(subjectIdx-1)+stnIdx,'NextPlot','add');
             plot(t,betaMod(controLatIdx,:),'r');
             xlim([-0.2 0.8])
@@ -266,47 +270,41 @@ for fileIdx = fileIndices
         end
         
         
-%         fprintf('[%d]',strideIdx);
-%         fprintf('%s ',evNames{(-2:2) + strideIdx});
-%         fprintf('\n');
-%         strideRaw	= signals(:,timeWindow)';
-%         f 		= walkingStruct.Freqs(freqMask);
-%         
-%         % then create the time-warping vector
-%         originalVector = [1 (strideStart((-2:1:2) + strideIdx)...
-%             - timeWindow(1))  800];
-%         
-%         if sProcess.options.doWarping.Value
-%             
-%             % compute the mixing matrix that maps the single orignal
-%             % stance on the normalized stance
-%             mixingMatrix 	 = mytimewarp(referenceVector,originalVector,3);
-%             
-%             % apply warping at each channel separately for both TF
-%             finalTF(1,:,:) = mixingMatrix * squeeze(dataTF(1,:,:));
-%             finalTF(2,:,:) = mixingMatrix * squeeze(dataTF(2,:,:));
-%             
-%             % and raw data
-%             finalRaw(1,:)	 = mixingMatrix * strideRaw(:,1);
-%             finalRaw(2,:)	 = mixingMatrix * strideRaw(:,2);
-% 
-%             tAxis		= referenceTimeVector;
-%             tEvAxis = repmat(referenceTimeVector(referenceStance([2 3 4])),2, 1);
-%             
-%         else
-%             finalTF 	= dataTF;
-%             finalRaw	= strideRaw';
-% 
-%             tAxis		= (-399:400)/fs;
-%             tEvAxis 	= repmat(originalVector([3 4 5])./fs,2, 1);
-%         end
-%         
+        fprintf('[%d]',strideIdx);
+        fprintf('%s ',evNames{(-1:1) + strideIdx});
+        fprintf('\n');
+%        strideRaw	= signals(:,timeWindow)';
+        f           = walkingStruct.Freqs(freqMask);
+        
+        % then create the time-warping vector
+        originalVector = [1 (strideStart((-1:1) + strideIdx)...
+            - timeWindow(1))  800];
+        
+        if sProcess.options.doWarping.Value
+            
+            % compute the mixing matrix that maps the single orignal
+            % stance on the normalized stance
+            mixingMatrix 	 = mytimewarp(referenceVector,originalVector,3);
+            
+            % apply warping at each channel separately for both TF
+            finalTF(1,:,:) = mixingMatrix * squeeze(dataTF(1,:,:));
+            finalTF(2,:,:) = mixingMatrix * squeeze(dataTF(2,:,:));
+            
+            % and raw data
+            finalRaw(1,:)	 = mixingMatrix * strideRaw(:,1);
+            finalRaw(2,:)	 = mixingMatrix * strideRaw(:,2);
 
-%         
-%         
+            tAxis		= referenceTimeVector;
+            tEvAxis = repmat(referenceTimeVector(referenceStance([2 3 4])),2, 1);
+            
+        else
+            finalTF 	= dataTF;
+            finalRaw	= strideRaw';
 
-%         
-%         
+            tAxis		= (-399:400)/fs;
+            tEvAxis 	= repmat(originalVector([3 4 5])./fs,2, 1);
+        end
+
 %         % we save for each subject the time-warped ERSD normalized over***
 %         stnRawResults{subjectIdx,stnIdx} = ...
 %             cat(1,stnRawResults{subjectIdx,stnIdx},...
@@ -335,6 +333,7 @@ for fileIdx = fileIndices
 end % for sInputs files
 
 % stnResults holds ERSD for each stride divide as STN-/+
+    
 	stnMeans = cellfun(@nanmean,stnResults,'UniformOutput',false);
     nSubjects = numel(subjectNameOrdered);
     figure
@@ -346,6 +345,13 @@ end % for sInputs files
         plot(t,stnMeans{subjIdx,2},'LineWidth',2,'Color','b')
         xlim([-0.2 0.8])
     end
+    
+    A = cat(1,stnMeans{:});
+    A = reshape(A',800,8,2);
+    
+    figure
+    plot(t,squeeze(mean(A,2)));
+    
 %
 %
 %	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);

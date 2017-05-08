@@ -1,4 +1,4 @@
-function varargout = process_walking_phaseSynch( varargin )
+function varargout = process_walking_phaseSynch_wavelet( varargin )
 
 % @=============================================================================
 % This software is part of the Brainstorm software:
@@ -26,14 +26,14 @@ end
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
 % Description the process
-sProcess.Comment     = 'Phase Synch';
+sProcess.Comment     = 'Phase Synch Wavelet';
 sProcess.FileTag     = '__';
 sProcess.Category    = 'Custom';
 sProcess.SubGroup    = 'Walking';
 sProcess.Index       = 801;
 % Definition of the input accepted by this process
-sProcess.InputTypes  = {'data'};
-sProcess.OutputTypes = {'data'};
+sProcess.InputTypes  = {'timefreq'};
+sProcess.OutputTypes = {'timfreq'};
 sProcess.nInputs     = 1;
 sProcess.nMinFiles   = 1;
 
@@ -79,8 +79,9 @@ f1 = figure('papertype','a4','paperorientation',...
 
 OutputFiles = {};
 
-nPermutation = 100;
-nFilters	 = 13;
+f = 1:60;
+nPermutation = 2;
+nFilters	 = 60;
 % alpha		 = 0.05;
 trialLength  = 3;
 
@@ -91,6 +92,8 @@ plotIdx = 1;
 
 for subjIdx = 1:nSubjects
     
+    fprintf('Analyzing %s %s\n',subjectNames{subjIdx},'stand');
+    
     % for each subject separately we pick standing condition
     subjectMask 	= ~cellfun(@isempty,regexp({sInputs.SubjectName},subjectNames{subjIdx}));
     
@@ -98,17 +101,25 @@ for subjIdx = 1:nSubjects
     walkingFileIdx 	= find(subjectMask & walkingConMask & offConMask);
     restingFileIdx 	= find(subjectMask & restingConMask & offConMask);
     
-    if ~isempty(standingFileIdx)
+    if ~isempty(standingFileIdx)        
+        
+        % read data struct 
+        standingStruct  = in_bst_data(sInputs(standingFileIdx).FileName);
+        
         % get bad channels
-        standChFlag		= getfield(in_bst_data(sInputs(standingFileIdx).FileName,'ChannelFlag'),'ChannelFlag');
+        %parentStruct 	= bst_process('GetInputStruct',standingStruct.DataFile);        
+        standChFlag		= getfield(...
+                in_bst_data(sInputs(standingFileIdx).DataFile,...
+                'ChannelFlag'),'ChannelFlag');
 
-        [standingStruct,~,~]  = out_fieldtrip_data(sInputs(standingFileIdx).FileName);
         standChannels 	= in_bst_channel(sInputs(standingFileIdx).ChannelFile);
-        standiChannels	= channel_find( standChannels.Channel,'SEEG');    
+        standStnChMask	= ~cellfun(@isempty,regexp('SEEG', {standChannels.Channel.Type}));
+        
+        standiChannels  = find(standChFlag(:) == 1 & standStnChMask(:));
+      
+        standiChannels  = 1:2;
 
-        [filteredstandingStruct,f] = narrowBandFiltering(standingStruct, nFilters,standiChannels,standChFlag,trialLength);
-        % [plv, f, nPLV] = computePhaseMetric
-        [standPlv,standnPlv, standAmp] = computePhaseMetric(filteredstandingStruct,standingStruct.label,nPermutation);
+        [standPlv,~, standAmp] = computePhaseMetric(standingStruct,standiChannels,nPermutation);
         
     else
         standPlv = zeros(1,nFilters);
@@ -118,55 +129,52 @@ for subjIdx = 1:nSubjects
     
     standingData{plotIdx,1} = standPlv;
     standingData{plotIdx,2} = standAmp;
-    standingData{plotIdx,3} = standnPlv;
-    standingData{plotIdx,4} = imag(standPlv);
+%     standingData{plotIdx,3} = standnPlv;
+    standingData{plotIdx,3} = imag(standPlv);
         
     if ~isempty(restingFileIdx)
-        restingStruct = struct('dimord',[],'trial',[],'time',[],'label',[],'elec',[]);
+        fprintf('Analyzing %s %s\n',subjectNames{subjIdx},'rest');
 
         % resting recordings can be more than 1
         for restIdx = 1:numel(restingFileIdx)
             % read resting time-freq data
             restChFlag 	= getfield(...
-                in_bst_data(sInputs(restingFileIdx(restIdx)).FileName,...
+                in_bst_data(sInputs(restingFileIdx(restIdx)).DataFile,...
                 'ChannelFlag'),'ChannelFlag');
 
             % this contains a single file with multiple trials
-            [restIdxStruct,~,~]         = out_fieldtrip_data(sInputs(restingFileIdx(restIdx)).FileName);
-            restChannels                = in_bst_channel(sInputs(restingFileIdx(restIdx)).ChannelFile);
-            restiChannels               = channel_find(restChannels.Channel,'SEEG');
-            [filteredrestingStruct,f]   = narrowBandFiltering(restIdxStruct, nFilters,restiChannels,restChFlag,trialLength);
-
-            if isempty(filteredrestingStruct)
-                continue
-            end
-
-            if restIdx == 1
-                restingStruct = filteredrestingStruct;
-            else
-                for fIdx = 1:nFilters
-                    restingStruct(fIdx).trial = [restingStruct(fIdx).trial filteredrestingStruct(fIdx).trial];
-                    restingStruct(fIdx).time  = [restingStruct(fIdx).time filteredrestingStruct(fIdx).time];                   
-                    restingStruct(fIdx).hdr.nTrials = numel(restingStruct(fIdx).trial);
-                end
-            end
+            restChannels  = in_bst_channel(sInputs(restingFileIdx(restIdx)).ChannelFile);
+            restStnChMask	= ~cellfun(@isempty,regexp('SEEG', {restChannels.Channel.Type}));
+        
+            restiChannels  = find(restChFlag(:) == 1 & restStnChMask(:));
+            
+            restiChannels = 1:2;
+            
+            % read data struct 
+            restingStruct = in_bst_data(sInputs(restingFileIdx(restIdx)).FileName);
+      
+            [restPlv(:,restIdx), ~, restAmp(:,restIdx)] = computePhaseMetric(restingStruct,restiChannels,nPermutation);
+            
         end
-
-        [restPlv, restnPlv, restAmp] = computePhaseMetric(restingStruct,restIdxStruct.label,nPermutation);
+        
+        % take the mean across trials
+        restPlv = mean(restPlv,2);
+        restAmp = mean(restAmp,2);
 
     else
-        restPlv = zeros(1,nFilters);
-        restnPlv = zeros(1,nFilters);
-        restAmp = zeros(1,nFilters);
+        
+        restPlv = zeros(1,60);
+        restAmp = zeros(1,60);
+
     end
     
     restingData{plotIdx,1} = restPlv;
     restingData{plotIdx,2} = restAmp;
-    restingData{plotIdx,3} = restnPlv;
-    restingData{plotIdx,4} = imag(restPlv);
+    %restingData{plotIdx,3} = restnPlv;
+    restingData{plotIdx,3} = imag(restPlv);
     
     if ~isempty(walkingFileIdx)
-        walkingStruct   = struct('dimord',[],'trial',[],'time',[],'label',[],'elec',[]);
+        fprintf('Analyzing %s %s\n',subjectNames{subjIdx},'walk');
 
         for walkIdx = 1:numel(walkingFileIdx)
             % read walking time-freq data
@@ -175,48 +183,35 @@ for subjIdx = 1:nSubjects
                 'ChannelFlag'),'ChannelFlag');
 
             % this contains a single file with multiple trials
-            [walkIdxStruct,~,~]         = out_fieldtrip_data(sInputs(walkingFileIdx(walkIdx)).FileName);
-            walkChannels                = in_bst_channel(sInputs(walkingFileIdx(walkIdx)).ChannelFile);
-            walkiChannels               = channel_find(walkChannels.Channel,'SEEG');
-            [filteredwalkingStruct,f]   = narrowBandFiltering(walkIdxStruct, nFilters,walkiChannels,walkChFlag,trialLength);
+           
+            walkingStruct   = in_bst_data(sInputs(walkingFileIdx(walkIdx)).FileName);
+            walkChannels    = in_bst_channel(sInputs(walkingFileIdx(walkIdx)).ChannelFile);
+            walkiChannels   = channel_find(walkChannels.Channel,'SEEG');
+            
+            walkiChannels = 1:2;
+  
+            [walkPlv(:,walkIdx), ~,walkAmp(:,walkIdx)] = computePhaseMetric(walkingStruct,walkiChannels,nPermutation);
 
-            if isempty(filteredwalkingStruct)
-                continue
-            end
-
-            if walkIdx == 1
-                walkingStruct = filteredwalkingStruct;
-            else
-                for fIdx = 1:nFilters
-                    walkingStruct(fIdx).trial = [walkingStruct(fIdx).trial filteredwalkingStruct(fIdx).trial];
-                    walkingStruct(fIdx).time  = [walkingStruct(fIdx).time filteredwalkingStruct(fIdx).time];
-                    % compute the STN coherence during walking
-                    % walkingStruct(fIdx) = rmfield(walkingStruct(fIdx),'sampleinfo');
-                    walkingStruct(fIdx).hdr.nTrials = numel(walkingStruct(fIdx).trial);
-                end
-            end
         end
-
-
-        [walkPlv, walknPlv,walkAmp] = computePhaseMetric(walkingStruct,walkIdxStruct.label,nPermutation);
-
+        
+        walkPlv = mean(walkPlv,2);
+        walkAmp = mean(walkAmp,2);
         
     else
-        walkPlv = zeros(1,nFilters);
-        walknPlv = zeros(1,nFilters);
-        walkAmp = zeros(1,nFilters);
+        walkPlv   = zeros(1,nFilters);
+        walknPlv  = zeros(1,nFilters);
+        walkAmp   = zeros(1,nFilters);
     end
     
     walkingData{plotIdx,1} = walkPlv;
     walkingData{plotIdx,2} = walkAmp;
-    walkingData{plotIdx,3} = walknPlv;
-    walkingData{plotIdx,4} = imag(walkPlv);
+    walkingData{plotIdx,3} = imag(walkPlv);
     
     ax1 = subplot(nSubjects,4,4*(plotIdx-1)+1,'NextPlot','add');
     plot(f,abs(restPlv),'LineWidth',1,'Color',[0 109 219]./255);
     plot(f,abs(standPlv),'LineWidth',1,'Color',[255 109 182]./255);
     plot(f,abs(walkPlv),'LineWidth',1,'Color',[76 255 36]./255);
-    %legend({'rest','stand','walk','C.I'});
+    
     xlim([6 60]);
     ylim([0 0.5]);
 
@@ -228,7 +223,7 @@ for subjIdx = 1:nSubjects
     plot(f,abs(imag(restPlv)),'LineWidth',1,'Color',[0 109 219]./255);
     plot(f,abs(imag(standPlv)),'LineWidth',1,'Color',[255 109 182]./255);
     plot(f,abs(imag(walkPlv)),'LineWidth',1,'Color',[76 255 36]./255);
-    %legend({'rest','stand','walk'});
+    
     xlim([6 60]);
     ylim([0 0.5]);
 
@@ -247,20 +242,22 @@ for subjIdx = 1:nSubjects
     ylabel('AAc');
     set(ax3,'Parent',f1);
     
-    ax4 = subplot(nSubjects,4,4*(plotIdx-1)+4,'NextPlot','add');
-    plot(f,abs(restnPlv),'LineWidth',1,'Color',[0 109 219]./255);
-    plot(f,abs(standnPlv),'LineWidth',1,'Color',[255 109 182]./255);
-    plot(f,abs(walknPlv),'LineWidth',1,'Color',[76 255 36]./255);
-    plot(f,repmat(2.42,size(f)),'--');
-    %legend({'rest','stand','walk','C.I'});
-    xlim([6 60]);
-    %ylim([0 1]);
-    
-    xlabel('Hz');
-    ylabel('nPLV');
-    set(ax4,'Parent',f1);
+%     ax4 = subplot(nSubjects,4,4*(plotIdx-1)+4,'NextPlot','add');
+%     plot(f,abs(restnPlv),'LineWidth',1,'Color',[0 109 219]./255);
+%     plot(f,abs(standnPlv),'LineWidth',1,'Color',[255 109 182]./255);
+%     plot(f,abs(walknPlv),'LineWidth',1,'Color',[76 255 36]./255);
+%     plot(f,repmat(2.42,size(f)),'--');
+%     %legend({'rest','stand','walk','C.I'});
+%     xlim([6 60]);
+%     %ylim([0 1]);
+%     
+%     xlabel('Hz');
+%     ylabel('nPLV');
+%     set(ax4,'Parent',f1);
     drawnow
     plotIdx = plotIdx + 1;
+    
+    clearvars restPlv restAmp
     
 end % subject loop
 
@@ -269,9 +266,9 @@ end % subject loop
 
 % reformat data in a 3D matrix with nSubjects x Freq x metric
 % first concat all elements in nFreq x ( nSubjects x metric )
-restData = reshape(cat(2,restingData{:}),[nFilters nSubjects 4]);
-walkData = reshape(cat(2,walkingData{:}),[nFilters nSubjects 4]);
-standData = reshape(cat(2,standingData{:}),[nFilters nSubjects 4]);
+restData = reshape(cat(2,restingData{:}),[nFilters nSubjects 3]);
+walkData = reshape(cat(2,walkingData{:}),[nFilters nSubjects 3]);
+standData = reshape(cat(2,standingData{:}),[nFilters nSubjects 3]);
 
 [confLimRest, avgRest]   = myBootstrap(abs(restData),nSubjects,10);
 [confLimWalk, avgWalk]   = myBootstrap(abs(walkData),nSubjects,10);
@@ -316,7 +313,7 @@ xlabel('Freq. (Hz)');
 ylabel('CC');
 xlim([0 60]);
 
-%% compare nPLV across conditions
+%% compare nPLV across con)ditions
 pRestvsWalk = mySignRank(abs((restData))-abs((walkData)),3);
 pRestvsStand= mySignRank(abs((restData))-abs((standData)),3);
 subplot(1,4,3,'NextPlot','add')
@@ -434,7 +431,7 @@ end
 % function pvalue = fdrCorrection(pvalue, alpha)
 % %FDRCORRECTION Description
 % %	PVALUE  = FDRCORRECTION() Long description
-% %
+% %cPLV = cPLV./nTimes;
 % 
 % tmpPvalue 	= sort(pvalue(:));
 % N 			= numel(pvalue);
@@ -451,55 +448,49 @@ end
 
 
 
-function [plv, nPLV, amp] = computePhaseMetric(data,~,nPermutation)
+function [cPLV, cPLVSurrMean, amp,ampSurrStd] = computePhaseMetric(data,iChannels,nPermutations)
 % Description
 %	[PTE,PLV, F] = computePhaseMetric(data,channelNames)
+try
+    data = data.TF(iChannels,:,:);
+catch
+    p = 0;
+end
+% data will contain the complex wavelet coefficients
+[nChans,nTimes,nFreqs] = size(data);
+% nTrials      = 1;
 
-
-%chMask	 = ~cellfun(@isempty,regexp(channelNames,'E[0-9]*'));
-nFilters = numel(data);
-nTrials  = numel(data(1).trial);
-plv 	 = complex(zeros(nFilters,nTrials),zeros(nFilters,nTrials));
-amp      = zeros(nFilters,nTrials);
-
-plvSurr	 = complex(zeros(nFilters,nTrials,nPermutation),zeros(nFilters,nTrials,nPermutation));
-
-nChans   = numel(unique([data.label]));
 if nChans > 2
-    error('casino');
+    p = 0;
 end
 
-for fIdx = 1:nFilters
+%plv          = complex(zeros(nFreqs,nTrials),zeros(nFreqs,nTrials));
+%amp          = zeros(nFreqs,nTrials);
+%plvSurr      = complex(zeros(nFreqs,nTrials,nPermutation),zeros(nFreqs,nTrials,nPermutation));
+
+for fIdx = 1:nFreqs
+    % get the angle, diff across channels and circmean across time
+    cPLV(fIdx) = squeeze(mean(exp(1i.*diff(angle(data(:,:,fIdx)))),2));
+    tmp = corrcoef(squeeze(abs(data(:,:,fIdx)))');
+    amp(fIdx)  = tmp(1,2);
     
-    % check if any trial contains NaN values and discard it
-    trlMask    = cellfun(@(x) sum(isnan(x),2),data(fIdx).trial,'uni',false);
-    trlMask    =  reshape(cat(1,trlMask{:}),2,numel(data(fIdx).trial));
-    trlMask    = sum(trlMask,1) == 0;
-    nTrials    = numel(trlMask);
-    trlIndices = 1:nTrials;
-    
-    for trialIdx = trlIndices(trlMask)
+    for permIdx = 1:nPermutations
         
-        % function [pTE, plv, plvSurr] = phaseTE(Xf,lag,nPermutation)        
-        [tmp,tmpSurr,tmpAmp] = phaseAmplitudeCorrelation(data(fIdx).trial{trialIdx},nPermutation);
-
-
-        amp(fIdx,trialIdx) = tmpAmp;
-        plv(fIdx,trialIdx) = tmp;
-        plvSurr(fIdx,trialIdx,:) = tmpSurr;
+        offset=randi(nTimes,1);
+        shiftData = circshift(data,offset,2);
+        cPLVSurr(fIdx,permIdx) = squeeze( mean( exp(1i.*((angle(data(1,:,fIdx)))-angle(shiftData(2,:,fIdx)))),2));
+        tmp = corrcoef(squeeze(abs(data(1,:,fIdx))),squeeze(shiftData(2,:,fIdx)));
+        ampSurr(fIdx,permIdx) = tmp(1,2);
         
     end
-    
 end
-% get the mean across trials for each filter
-plv 	= squeeze(nanmean(plv,2));
-amp     = squeeze(nanmean(amp,2));
 
-% get the mean across trials and across permutations for each filter
-plvSurr = squeeze(mean(mean(plvSurr,2),3));
+% get cPLV mean across permutation
+cPLVSurrMean = mean(cPLVSurr,2);
+ampSurrStd   = std(ampSurr,[],2);
 
-% this normalized PLV
-nPLV 	= abs(plv)./abs(plvSurr);
+
+
 
 end
 
