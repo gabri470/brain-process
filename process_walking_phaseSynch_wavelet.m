@@ -108,18 +108,18 @@ for subjIdx = 1:nSubjects
         
         % get bad channels
         %parentStruct 	= bst_process('GetInputStruct',standingStruct.DataFile);        
-        standChFlag		= getfield(...
-                in_bst_data(sInputs(standingFileIdx).DataFile,...
-                'ChannelFlag'),'ChannelFlag');
-
-        standChannels 	= in_bst_channel(sInputs(standingFileIdx).ChannelFile);
-        standStnChMask	= ~cellfun(@isempty,regexp('SEEG', {standChannels.Channel.Type}));
+%         standChFlag		= getfield(...
+%                 in_bst_data(sInputs(standingFileIdx).DataFile,...
+%                 'ChannelFlag'),'ChannelFlag');
+% 
+%         standChannels 	= in_bst_channel(sInputs(standingFileIdx).ChannelFile);
+%         standStnChMask	= ~cellfun(@isempty,regexp('SEEG', {standChannels.Channel.Type}));
         
-        standiChannels  = find(standChFlag(:) == 1 & standStnChMask(:));
+%         standiChannels  = find(standChFlag(:) == 1 & standStnChMask(:));
       
         standiChannels  = 1:2;
 
-        [standPlv,~, standAmp] = computePhaseMetric(standingStruct,standiChannels,nPermutation);
+        [standPlv,standPlvSurr, standAmp] = computePhaseMetric(standingStruct,standiChannels,nPermutation);
         
     else
         standPlv = zeros(1,nFilters);
@@ -138,28 +138,29 @@ for subjIdx = 1:nSubjects
         % resting recordings can be more than 1
         for restIdx = 1:numel(restingFileIdx)
             % read resting time-freq data
-            restChFlag 	= getfield(...
-                in_bst_data(sInputs(restingFileIdx(restIdx)).DataFile,...
-                'ChannelFlag'),'ChannelFlag');
-
-            % this contains a single file with multiple trials
-            restChannels  = in_bst_channel(sInputs(restingFileIdx(restIdx)).ChannelFile);
-            restStnChMask	= ~cellfun(@isempty,regexp('SEEG', {restChannels.Channel.Type}));
-        
-            restiChannels  = find(restChFlag(:) == 1 & restStnChMask(:));
+%             restChFlag 	= getfield(...
+%                 in_bst_data(sInputs(restingFileIdx(restIdx)).DataFile,...
+%                 'ChannelFlag'),'ChannelFlag');
+% 
+%             % this contains a single file with multiple trials
+%             restChannels  = in_bst_channel(sInputs(restingFileIdx(restIdx)).ChannelFile);
+%             restStnChMask	= ~cellfun(@isempty,regexp('SEEG', {restChannels.Channel.Type}));
+%         
+%             restiChannels  = find(restChFlag(:) == 1 & restStnChMask(:));
             
             restiChannels = 1:2;
             
             % read data struct 
             restingStruct = in_bst_data(sInputs(restingFileIdx(restIdx)).FileName);
       
-            [restPlv(:,restIdx), ~, restAmp(:,restIdx)] = computePhaseMetric(restingStruct,restiChannels,nPermutation);
+            [restPlv(:,restIdx), restPlvSurr(:,restIdx), restAmp(:,restIdx)] = computePhaseMetric(restingStruct,restiChannels,nPermutation);
             
         end
         
         % take the mean across trials
         restPlv = mean(restPlv,2);
         restAmp = mean(restAmp,2);
+        restPlvSurr = mean(restPlvSurr,2);
 
     else
         
@@ -178,24 +179,25 @@ for subjIdx = 1:nSubjects
 
         for walkIdx = 1:numel(walkingFileIdx)
             % read walking time-freq data
-            walkChFlag 	= getfield(...
-                in_bst_data(sInputs(walkingFileIdx(walkIdx)).FileName,...
-                'ChannelFlag'),'ChannelFlag');
-
-            % this contains a single file with multiple trials
-           
+%             walkChFlag 	= getfield(...
+%                 in_bst_data(sInputs(walkingFileIdx(walkIdx)).FileName,...
+%                 'ChannelFlag'),'ChannelFlag');
+% 
+%             % this contains a single file with multiple trials
+%            
             walkingStruct   = in_bst_data(sInputs(walkingFileIdx(walkIdx)).FileName);
-            walkChannels    = in_bst_channel(sInputs(walkingFileIdx(walkIdx)).ChannelFile);
-            walkiChannels   = channel_find(walkChannels.Channel,'SEEG');
+%             walkChannels    = in_bst_channel(sInputs(walkingFileIdx(walkIdx)).ChannelFile);
+%             walkiChannels   = channel_find(walkChannels.Channel,'SEEG');
             
             walkiChannels = 1:2;
   
-            [walkPlv(:,walkIdx), ~,walkAmp(:,walkIdx)] = computePhaseMetric(walkingStruct,walkiChannels,nPermutation);
+            [walkPlv(:,walkIdx), walkPlvSurr(:,walkIdx),walkAmp(:,walkIdx)] = computePhaseMetric(walkingStruct,walkiChannels,nPermutation);
 
         end
         
         walkPlv = mean(walkPlv,2);
         walkAmp = mean(walkAmp,2);
+        walkPlvSurr = mean(walkPlvSurr,2);
         
     else
         walkPlv   = zeros(1,nFilters);
@@ -208,12 +210,16 @@ for subjIdx = 1:nSubjects
     walkingData{plotIdx,3} = imag(walkPlv);
     
     ax1 = subplot(nSubjects,4,4*(plotIdx-1)+1,'NextPlot','add');
+    
     plot(f,abs(restPlv),'LineWidth',1,'Color',[0 109 219]./255);
+    plot(f,abs(restPlvSurr),'LineWidth',0.5,'Color',[0 109 219]./255);
     plot(f,abs(standPlv),'LineWidth',1,'Color',[255 109 182]./255);
+    plot(f,abs(standPlvSurr),'LineWidth',0.5,'Color',[255 109 182]./255);
     plot(f,abs(walkPlv),'LineWidth',1,'Color',[76 255 36]./255);
+    plot(f,abs(walkPlvSurr),'LineWidth',0.5,'Color',[76 255 36]./255);
     
     xlim([6 60]);
-    ylim([0 0.5]);
+    ylim([0 0.3]);
 
     xlabel('Hz');
     ylabel('PLV');
@@ -332,22 +338,22 @@ ylabel('nPLV');
 xlim([0 60]);
 
 %% compare iPLV acorss conditions
-pRestvsWalk = mySignRank(abs((restData))-abs((walkData)),4);
-pRestvsStand= mySignRank(abs((restData))-abs((standData)),4);
-subplot(1,4,4,'NextPlot','add')
-plot(f,avgRest(:,1,4),'LineWidth',1,'Color',[0 109 219]./255);
-plot(f,avgStand(:,1,4),'LineWidth',1,'Color',[255 109 182]./255);
-plot(f,avgWalk(:,1,4),'LineWidth',1,'Color',[76 255 36]./255);
-
-legend({'rest' 'stand' 'walk'});
-plot(f,(pRestvsWalk)*0,'r','MarkerSize',1);
-plot(f,(pRestvsStand)*0,'k','MarkerSize',1);
-fill_between(f,confLimRest(1,:,4),confLimRest(2,:,4),f,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
-fill_between(f,confLimStand(1,:,4),confLimStand(2,:,4),f,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
-fill_between(f,confLimWalk(1,:,4),confLimWalk(2,:,4),f,'FaceColor',[76 255 36]./255,'FaceAlpha',0.2,'EdgeColor','None');
-xlabel('Freq. (Hz)');
-ylabel('iPLV');
-xlim([0 60]);
+% pRestvsWalk = mySignRank(abs((restData))-abs((walkData)),4);
+% pRestvsStand= mySignRank(abs((restData))-abs((standData)),4);
+% subplot(1,4,4,'NextPlot','add')
+% plot(f,avgRest(:,1,4),'LineWidth',1,'Color',[0 109 219]./255);
+% plot(f,avgStand(:,1,4),'LineWidth',1,'Color',[255 109 182]./255);
+% plot(f,avgWalk(:,1,4),'LineWidth',1,'Color',[76 255 36]./255);
+% 
+% legend({'rest' 'stand' 'walk'});
+% plot(f,(pRestvsWalk)*0,'r','MarkerSize',1);
+% plot(f,(pRestvsStand)*0,'k','MarkerSize',1);
+% fill_between(f,confLimRest(1,:,4),confLimRest(2,:,4),f,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
+% fill_between(f,confLimStand(1,:,4),confLimStand(2,:,4),f,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
+% fill_between(f,confLimWalk(1,:,4),confLimWalk(2,:,4),f,'FaceColor',[76 255 36]./255,'FaceAlpha',0.2,'EdgeColor','None');
+% xlabel('Freq. (Hz)');
+% ylabel('iPLV');
+% xlim([0 60]);
 
 %% Compute delta plv in conditions for selected F bands
 bandMasks = [f >= 4  & f < 8, f >= 8  & f < 13, f >= 13 & f < 30, f >= 30 & f < 60];
@@ -488,8 +494,6 @@ end
 % get cPLV mean across permutation
 cPLVSurrMean = mean(cPLVSurr,2);
 ampSurrStd   = std(ampSurr,[],2);
-
-
 
 
 end
