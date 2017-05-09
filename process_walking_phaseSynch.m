@@ -79,7 +79,7 @@ f1 = figure('papertype','a4','paperorientation',...
 
 OutputFiles = {};
 
-nPermutation = 100;
+nPermutation = 3;
 nFilters	 = 13;
 % alpha		 = 0.05;
 trialLength  = 3;
@@ -89,6 +89,7 @@ walkingData = cell(nSubjects,1);
 restingData = cell(nSubjects,1);
 plotIdx = 1;
 
+bst_progress('start','Estimating Phase Sync','Estimating Phase Sync',0,nSubjects);
 for subjIdx = 1:nSubjects
     
     % for each subject separately we pick standing condition
@@ -261,6 +262,7 @@ for subjIdx = 1:nSubjects
     set(ax4,'Parent',f1);
     drawnow
     plotIdx = plotIdx + 1;
+    bst_progress('inc',1);
     
 end % subject loop
 
@@ -343,8 +345,8 @@ plot(f,avgStand(:,1,4),'LineWidth',1,'Color',[255 109 182]./255);
 plot(f,avgWalk(:,1,4),'LineWidth',1,'Color',[76 255 36]./255);
 
 legend({'rest' 'stand' 'walk'});
-plot(f,(pRestvsWalk)*0,'r','MarkerSize',1);
-plot(f,(pRestvsStand)*0,'k','MarkerSize',1);
+plot(f,(pRestvsWalk)*0.3,'r','MarkerSize',1);
+plot(f,(pRestvsStand)*0.3,'k','MarkerSize',1);
 fill_between(f,confLimRest(1,:,4),confLimRest(2,:,4),f,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
 fill_between(f,confLimStand(1,:,4),confLimStand(2,:,4),f,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
 fill_between(f,confLimWalk(1,:,4),confLimWalk(2,:,4),f,'FaceColor',[76 255 36]./255,'FaceAlpha',0.2,'EdgeColor','None');
@@ -593,32 +595,41 @@ fn = 2;
 % band-flat top and band pass width
 wb = 0.5;
 % stop band
-% ws = 2;
+ws = 2;
 % multiplier
 m = sqrt(2);
 
 f = zeros(nFilters,1);
 dataOrig = data;
-% Fs = 1/mean(diff(dataOrig.time{1}));  
+fs = 1/mean(diff(dataOrig.time{1}));  
 
 for fIdx = 1:nFilters
     
     passBandLp = fn + (wb * fn)/2;
     passBandHp = fn - (wb * fn)/2;
-%     stopBandLp = fn * ws;
-%     stopBandHp = fn / ws;
+    stopBandLp = min([0.95*(fs/2) fn * ws]);
+    stopBandHp = fn / ws;
+    
     f(fIdx) = fn;
     fn = fn * m;
-
-
-    cfg.lpfreq = passBandLp;
-    cfg.hpfreq = passBandHp;
-    cfg.lpfilter = 'yes';
-    cfg.hpfilter = 'yes';
-    cfg.lpfiltertype = 'but';
-    cfg.hpfiltertype = 'but';
-    cfg.lpfiltdir = 'twopass';
-    cfg.hpfiltdir = 'twopass';
+    
+    cfg.bpfilter = 'yes';
+    
+    cfg.bpfilttype = 'fir';
+    cfg.bpfiltdir = 'twopass';
+    
+    
+    fcaz = [stopBandHp,passBandHp,passBandLp,stopBandLp]./(fs/2);
+    mags = [0 1 0];
+    devs = [1e-3 1e-3 1e-3];
+    
+    [n,Wn,beta,ftype] = kaiserord(fcaz, mags, devs, 2);
+    n = n + rem(n,2);  % ensure even order
+    cfg.bpfreq   = [ passBandHp passBandLp];
+    cfg.bpfiltord = n;
+    cfg.bpfiltwintype = kaiser(n+1,beta);
+    %cfg.bpfiltdev = devs;
+    
     cfg.padding  = trialLength;
     cfg.continuous = 'yes';
     data = ft_preprocessing(cfg,dataOrig);

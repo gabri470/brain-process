@@ -111,6 +111,29 @@ notMontageConMask 	= cellfun(@isempty,regexpi(conditionStrings,'visite'));
 
 fileIndices = find( walkingConMask & offConMask & notMontageConMask );
 
+nFilters = 13;
+
+% nominal frequency and central frequency
+fn = 2;
+% band-flat top and band pass width
+wb = 0.5;
+% stop band
+% ws = 2;
+% multiplier
+m = sqrt(2);
+
+f = zeros(nFilters,1);
+
+for fIdx = 1:nFilters
+
+    f(fIdx) = fn;
+    fn = fn * m;
+end
+
+options.MorletFc = 1;
+options.MorletFwhmTc = 2;
+options.Freqs = f;
+
 for fileIdx = fileIndices
     
     
@@ -246,12 +269,15 @@ for fileIdx = fileIndices
         % (hc_L) *tof_R  hc_R   *tof_L (hc_L)
         %    ^ start-2		|t0				      ^ start + 2 == end stride
         timeWindow = strideStart(strideIdx) + (-399:400);
-        freqMask 	 = walkingStruct.Freqs > 0;
-     
-        dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
+        freqMask   = f > 0;
+        
+        dataTF = morlet_transform(signals, parentData.Time, options.Freqs, options.MorletFc, options.MorletFwhmTc, 'n');  
+        dataTF = dataTF(:,timeWindow,freqMask);
+        
+        %dataTF 		 = walkingStruct.TF(:,timeWindow,freqMask);
         
         strideRaw	 = signals(:,timeWindow)'.*1e6;
-        f 			 = walkingStruct.Freqs(freqMask);
+        %f 			 = walkingStruct.Freqs(freqMask);
         
         % then create the time-warping vector
      
