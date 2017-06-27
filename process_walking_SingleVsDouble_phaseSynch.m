@@ -1,4 +1,4 @@
-function varargout = process_walking_StanceVsSwing( varargin )
+function varargout = process_walking_SingleVsDouble_phaseSynch(varargin )
 % PROCESS_EXAMPLE_CUSTOMAVG: Example file that reads all the data files in input, and saves the average.
 
 % @=============================================================================
@@ -30,7 +30,7 @@ end
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
 % Description the process
-sProcess.Comment     = 'Stance vs Swing';
+sProcess.Comment     = 'Single vs Double ';
 sProcess.FileTag     = '__';
 sProcess.Category    = 'Custom';
 sProcess.SubGroup    = 'Walking';
@@ -95,11 +95,10 @@ currentSubject=[];
 subjectIdx = 0;
 subjectNameOrdered = cell(nSubjects,1);
 
-swingTcourse = cell(nSubjects,2);
-stanceTcourse = cell(nSubjects,2);
-
-stancePlv = cell(nSubjects,1);
-swingPlv = cell(nSubjects,1);
+singleSuppTcourse = cell(nSubjects,2);
+doubleSuppTcourse = cell(nSubjects,2);
+singleSuppPlv = cell(nSubjects,1);
+doubleSuppPlv = cell(nSubjects,1);
 
 % we need to find files that have to be processed and group
 % them for subjects and conditions
@@ -252,18 +251,18 @@ for fileIdx = fileIndices
             % right foot stride
             controLatIdx = 2;
             if strcmp(mostAffSide,'L')
-                stnIdx	 = 1;
+                stnIdx	= 1;
             else
-                stnIdx					= 2;
+                stnIdx	= 2;
             end
         else
             
             % left foot stride
             controLatIdx = 1;
             if strcmp(mostAffSide,'L')
-                stnIdx					= 2;
+                stnIdx	= 2;
             else
-                stnIdx					= 1;
+                stnIdx	= 1;
             end
         end
         
@@ -303,20 +302,20 @@ for fileIdx = fileIndices
             finalRaw(2,:)	 = mixingMatrix * strideRaw(:,2);
            
             
-            % tf_* -> hc_*
-            stanceWnd	= referenceStance(2):referenceStance(3);
-            % tf_* -> hc_*
-            swingWnd	= referenceStance(4):referenceStance(5);
-            tAxis		= referenceTimeVector;
+            % tf_* -> hc_* => single support controlateral singleSupp
+            doubleSuppWnd = referenceStance(2):referenceStance(3);
+            % hc_* -> tf_* => double support subsequent to above singleSupp phase
+            singleSuppWnd	= referenceStance(3):referenceStance(4);
+            tAxis			= referenceTimeVector;
             
         else
             finalTF 	= [];
             finalRaw	= strideRaw';
             zLimit 		= [min(finalTF(:)) max(finalTF(:))];
             % tf_* -> hc_*
-            stanceWnd	= originalVector(3):originalVector(4);
+            doubleSuppWnd	= originalVector(2):originalVector(3);
             % tf_* -> hc_*
-            swingWnd	= originalVector(5):originalVector(6);
+            singleSuppWnd	= originalVector(3):originalVector(4);
             
             tAxis			= (-399:400)/fs;
         end
@@ -331,51 +330,51 @@ for fileIdx = fileIndices
         if sProcess.options.normalizeOnStride.Value
             normFactor 	= repmat(mean(finalTF,2),[1 numel(timeWindow) 1]);
             A 					= finalTF./normFactor;
-            swingData 	= A(controLatIdx,swingWnd,:);
-            stanceData	= A(controLatIdx,stanceWnd,:);
+            singleSuppData 	= A(controLatIdx,singleSuppWnd,:);
+            doubleSuppData	= A(controLatIdx,doubleSuppWnd,:);
             
         else
-            swingData = finalTF(controLatIdx,swingWnd,:);
-            stanceData = finalTF(controLatIdx,stanceWnd,:);
+            singleSuppData = finalTF(controLatIdx,singleSuppWnd,:);
+            doubleSuppData = finalTF(controLatIdx,doubleSuppWnd,:);
             
         end
         
         % ch x time x freq
-        swingPhaseData  = angle(finalTF(:,swingWnd,:));
-        stancePhaseData = angle(finalTF(:,stanceWnd,:));
+        singleSuppPhaseData  = angle(finalTF(:,singleSuppWnd,:));
+        doubleSuppPhaseData = angle(finalTF(:,doubleSuppWnd,:));
         
-        swingPlvSingleTrial  = abs(mean(exp(1i.*squeeze(diff(swingPhaseData,[],1)))));
-        stancePlvSingleTrial = abs(mean(exp(1i.*squeeze(diff(stancePhaseData,[],1)))));
+        singleSuppPlvSingleTrial = abs(mean(exp(1i.*squeeze(diff(singleSuppPhaseData,[],1)))));
+        doubleSuppPlvSingleTrial = abs(mean(exp(1i.*squeeze(diff(doubleSuppPhaseData,[],1)))));
         
-        swingPlv{subjectIdx}   = cat(1,swingPlv{subjectIdx},swingPlvSingleTrial);
-        stancePlv{subjectIdx}  = cat(1,stancePlv{subjectIdx},stancePlvSingleTrial);
+        singleSuppPlv{subjectIdx}  = cat(1,singleSuppPlv{subjectIdx},singleSuppPlvSingleTrial);
+        doubleSuppPlv{subjectIdx}  = cat(1,doubleSuppPlv{subjectIdx},doubleSuppPlvSingleTrial);
         
         
         if strcmp(sProcess.options.method.Value,'zscore')
-            % z score swing
-            swingZScored = bsxfun(@rdivide,bsxfun(@minus,finalTF(:,swingWnd,:),...
-                mean(finalTF(:,swingWnd,:),2)),...
-                std(finalTF(:,swingWnd,:),[],2));
+            % z score singleSupp
+            singleSuppZScored = bsxfun(@rdivide,bsxfun(@minus,finalTF(:,singleSuppWnd,:),...
+                mean(finalTF(:,singleSuppWnd,:),2)),...
+                std(finalTF(:,singleSuppWnd,:),[],2));
             
-            % z score stance
-            stanceZScored = bsxfun(@rdivide,bsxfun(@minus,finalTF(:,stanceWnd,:),...
-                mean(finalTF(:,stanceWnd,:),2)),...
-                std(finalTF(:,stanceWnd,:),[],2));
+            % z score doubleSupp
+            doubleSuppZScored = bsxfun(@rdivide,bsxfun(@minus,finalTF(:,doubleSuppWnd,:),...
+                mean(finalTF(:,doubleSuppWnd,:),2)),...
+                std(finalTF(:,doubleSuppWnd,:),[],2));
             
             finalTFZScored = bsxfun(@rdivide,...
-                bsxfun(@minus,finalTF(:,stanceWnd,:),...
-                mean(finalTF(:,swingWnd,:),2)),...
-                std(finalTF(:,swingWnd,:),[],2));
+                bsxfun(@minus,finalTF(:,doubleSuppWnd,:),...
+                mean(finalTF(:,singleSuppWnd,:),2)),...
+                std(finalTF(:,singleSuppWnd,:),[],2));
             
         elseif(strcmp(sProcess.options.method.Value,'rchange'))
             % relative change
             finalTFZScored = bsxfun(@rdivide,...
-                bsxfun(@minus,finalTF(:,stanceWnd,:),...
-                mean(finalTF(:,swingWnd,:),2)),...
-                mean(finalTF(:,swingWnd,:),2));
+                bsxfun(@minus,finalTF(:,doubleSuppWnd,:),...
+                mean(finalTF(:,singleSuppWnd,:),2)),...
+                mean(finalTF(:,singleSuppWnd,:),2));
             
         elseif(strcmp(sProcess.options.method.Value,'difference'))
-            finalTFZScored = stanceZScored - swingZScored;
+            finalTFZScored = doubleSuppZScored - singleSuppZScored;
            
         end
         
@@ -385,11 +384,11 @@ for fileIdx = fileIndices
                 finalTFZScored(controLatIdx,:,:));
             
             % for each subject and stn-(1)/+(2) we save the time-averaged
-            % swing and stance power
-            swingTcourse{subjectIdx,stnIdx} = ...
-                cat(1,swingTcourse{subjectIdx,stnIdx},swingData);
-            stanceTcourse{subjectIdx,stnIdx} = ...
-                cat(1,stanceTcourse{subjectIdx,stnIdx},stanceData);
+            % singleSupp and doubleSupp power
+            singleSuppTcourse{subjectIdx,stnIdx} = ...
+                cat(1,singleSuppTcourse{subjectIdx,stnIdx},singleSuppData);
+            doubleSuppTcourse{subjectIdx,stnIdx} = ...
+                cat(1,doubleSuppTcourse{subjectIdx,stnIdx},doubleSuppData);
         else
             stnResults{subjectIdx,stnIdx} = ...
                 cat(1,stnResults{subjectIdx,stnIdx},...
@@ -406,8 +405,8 @@ for fileIdx = fileIndices
     
 end % for sInputs files
 
-% stnResults holds the zscored-power modulation (1,t,f) for stance {:,:,1}
-% and swing {:,:,2} for each subjects {ii,:,:} and each strides and for
+% stnResults holds the zscored-power modulation (1,t,f) for doubleSupp {:,:,1}
+% and singleSupp {:,:,2} for each subjects {ii,:,:} and each strides and for
 % both STN- {:,1,:} and STN+ {:,2,:}.
 % We first average each element of stnResults across time in order to have
 % a frequency modulation
@@ -445,41 +444,41 @@ patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'
 
 plotIdx = 1;
 
-swingPlv = cellfun(@mean,swingPlv,'UniformOutput',false);
-stancePlv = cellfun(@mean,stancePlv,'UniformOutput',false);
+singleSuppPlv = cellfun(@mean,singleSuppPlv,'UniformOutput',false);
+doubleSuppPlv = cellfun(@mean,doubleSuppPlv,'UniformOutput',false);
 
-swngPlv = cat(1,swingPlv{:});
-stncPlv = cat(1,stancePlv{:});
+singlePlv = cat(1,singleSuppPlv{:});
+doublePlv = cat(1,doubleSuppPlv{:});
 
 % swngPlv = avgInfBands(swngPlv,passBandsMask);
 % stncPlv = avgInfBands(stncPlv,passBandsMask);
 fBands = f;
 
-[stanceCL, stanceMean] = myBootstrap(stncPlv,nSubjects,20);
-[swingCL, swingMean] = myBootstrap(swngPlv,nSubjects,20);
+[doubleSuppCL, doubleSuppMean] = myBootstrap(doublePlv,nSubjects,20);
+[singleSuppCL, singleSuppMean] = myBootstrap(singlePlv,nSubjects,20);
 
-p = mySignrank(swngPlv-stncPlv);
+p = mySignrank(doublePlv-singlePlv);
 
-plot(fBands,stanceMean,'Color',[0 109 219]./255);
+h1 = plot(fBands,doubleSuppMean,'Color',[0 109 219]./255);
 hold on
-plot(fBands,swingMean,'Color',[255 109 182]./255);
-legend({'stance','swing'});
+h2 = plot(fBands,singleSuppMean,'Color',[255 109 182]./255);
+legend([h1 h2], {'doubleSupp','singleSupp'});
 
-fill_between(fBands,stanceCL(1,:),stanceCL(2,:),fBands,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
-fill_between(fBands,swingCL(1,:),swingCL(2,:),fBands,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(fBands,doubleSuppCL(1,:),doubleSuppCL(2,:),fBands,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
+fill_between(fBands,singleSuppCL(1,:),singleSuppCL(2,:),fBands,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
 
 xlim([min(fBands) 60]);
 
-for ii = ord
+%for ii = ord
 %     
 %     fprintf('Statistcs on %s\n',subjectNameOrdered{ii});
 %     
 %     %% these below contain complex wavelet coeff
-%     phaseStanceStnMost = angle(stanceTcourse{ii,1});
-%     phaseStanceStnLess = angle(stanceTcourse{ii,2});
+%     phaseStanceStnMost = angle(doubleSuppTcourse{ii,1});
+%     phaseStanceStnLess = angle(doubleSuppTcourse{ii,2});
 %     
-%     phaseSwingStnMost  = angle(swingTcourse{ii,1});
-%     phaseSwingStnLess  = angle(swingTcourse{ii,2});
+%     phaseSwingStnMost  = angle(singleSuppTcourse{ii,1});
+%     phaseSwingStnLess  = angle(singleSuppTcourse{ii,2});
 %     
 %     %% phaseStanceStnMost and other are trial x time x freq matrices 
 %     plvStance = squeeze(mean(abs(sum(exp(phaseStanceStnMost-phaseStanceStnLess),2))));
@@ -488,17 +487,41 @@ for ii = ord
 %          
 %     subplot(nSubjects,2,(plotIdx-1),'NextPlot','add')
 %     plot(f,plvStance,f,plvSwing)
-    
-    
-    
+%    
+%    
+%    
 %     [corrPvalue(:,1), pvalue(:,1)] = runPermutationTest(stnMeans{ii,1},...
-%         stanceTcourse{ii,1},swingTcourse{ii,1},100);
+%         doubleSuppTcourse{ii,1},singleSuppTcourse{ii,1},100);
 %     [corrPvalue(:,2), pvalue(:,2)] = runPermutationTest(stnMeans{ii,2},...
-%         stanceTcourse{ii,2},swingTcourse{ii,2},100);
+%         doubleSuppTcourse{ii,2},singleSuppTcourse{ii,2},100);
 %     
 %     
 %     % need multiple comparison correction  FDR
-%     corrSignificanceMask = nan(size(corrPvalue));
+%     cororrSignificanceMask = nan(size(pvalue));
+%     unCorrSignificanceMask(pvalue < 0.05) = 4;
+%     
+%     
+%     % this is the STN-
+%     annotation('textbox',[0.05, 0.85-(plotIdx-1)*0.1, 0.1, 0.05],...
+%         'String',subjectNameOrdered{ii},'LineStyle','None');
+%     
+%     subplot(nSubjects,2,2*(plotIdx-1)+1,'NextPlot','add')
+%     plot(f,squeeze(mean(stnMeans{ii,1},2)))
+%     plot([0 0;90 90],[-3 3;-3 3],'k--');
+%     plot(f,unCorrSignificanceMask(:,1),'k.','MarkerSize',16);
+%     plot(f,corrSignificanceMask(:,1),'r.','MarkerSize',16);
+%     xlim([6 80]);
+%     ylim([-5 5]);
+%     
+%     
+%     
+%     subplot(nSubjects,2,2*(plotIdx-1)+2,'NextPlot','add')
+%     plot(f,squeeze(mean(stnMeans{ii,2},2)))
+%     plot([0 0;90 90],[-3 3;-3 3],'k--');
+%     plot(f,unCorrSignificanceMask(:,2),'k.','MarkerSize',16);
+%     plot(f,corrSignificanceMask(:,2),'r.','MarkerSize',16);
+%     xlim([6 60]);
+%     ylim([-5 5]);rSignificanceMask = nan(size(corrPvalue));
 %     corrSignificanceMask(corrPvalue < 0.05) = 4;
 %     
 %     unCorrSignificanceMask = nan(size(pvalue));
@@ -526,9 +549,9 @@ for ii = ord
 %     plot(f,corrSignificanceMask(:,2),'r.','MarkerSize',16);
 %     xlim([6 60]);
 %     ylim([-5 5]);
-    plotIdx = plotIdx + 1;
-    
-end
+%    plotIdx = plotIdx + 1;
+%    
+%end
 % annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
 % annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
 % 
@@ -583,13 +606,13 @@ function [confLimit,dataMean] = myBootstrap(data,nSubject,nBootstraps)
         
 end
 
-function [corrPvalue,unCorrPvalue] = runPermutationTest(dataObs,stance,swing,nPermutation)
+function [corrPvalue,unCorrPvalue] = runPermutationTest(dataObs,doubleSupp,singleSupp,nPermutation)
 %RUNPERMUTATIONTEST
 %	[CORRECTEDPVALUES,UNCORRECTEDPVALUES] = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION)
 %
-pvalue  = zeros(size(stance,3),1);
-nStance = size(stance,1);
-nSwing  = size(swing,1);
+pvalue  = zeros(size(doubleSupp,3),1);
+nDoubleSupp = size(doubleSupp,1);
+nSingleSupp  = size(singleSupp,1);
 
 dataObs = squeeze(mean(dataObs,2));
 
@@ -597,15 +620,15 @@ dataObs = squeeze(mean(dataObs,2));
 for permIdx = 1:nPermutation
     
     % concatenate each stride phase
-    evGroup = [stance;swing];
+    evGroup = [doubleSupp;singleSupp];
     
     % riffle indices
-    riffledIdx = randperm(nStance+nSwing);
+    riffledIdx = randperm(nDoubleSupp+nSingleSupp);
     
     % separate in two groups with same probablilty as
     % observed data (ie. sample size)
-    dataStance = evGroup(riffledIdx(1:nStance),:,:);
-    dataSwing = evGroup(riffledIdx(nStance+1:end),:,:);
+    dataStance = evGroup(riffledIdx(1:nDoubleSupp),:,:);
+    dataSwing = evGroup(riffledIdx(nDoubleSupp+1:end),:,:);
     
     % compute permutated statistics
     dataPerm = bsxfun(@rdivide,...
