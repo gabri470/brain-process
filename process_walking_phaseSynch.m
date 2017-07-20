@@ -67,7 +67,8 @@ conditionStrings 	= {sInputs.Condition};
 standingConMask = ~cellfun(@isempty,regexp(conditionStrings,'(s|S)tanding'));
 walkingConMask 	= ~cellfun(@isempty,regexp(conditionStrings,'(w|W)alking'));
 restingConMask 	= ~cellfun(@isempty,regexp(conditionStrings,'(r|R)esting'));
-offConMask 		= ~cellfun(@isempty,regexpi(conditionStrings,'off'));
+offConMask 			= ~cellfun(@isempty,regexpi(conditionStrings,'off'));
+montageConMask 	= ~cellfun(@isempty,regexpi(conditionStrings,'visite'));
 
 % order patients in descending order based on dopamine-deplition
 % patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
@@ -95,9 +96,9 @@ for subjIdx = 1:nSubjects
     % for each subject separately we pick standing condition
     subjectMask 	= ~cellfun(@isempty,regexp({sInputs.SubjectName},subjectNames{subjIdx}));
     
-    standingFileIdx = find(subjectMask & standingConMask & offConMask);
-    walkingFileIdx 	= find(subjectMask & walkingConMask & offConMask);
-    restingFileIdx 	= find(subjectMask & restingConMask & offConMask);
+    standingFileIdx = find(subjectMask & standingConMask & offConMask);% & ~montageConMask);
+    walkingFileIdx 	= find(subjectMask & walkingConMask & offConMask);% & ~montageConMask);
+    restingFileIdx 	= find(subjectMask & restingConMask & offConMask);% & ~montageConMask);
     
     if ~isempty(standingFileIdx)
         % get bad channels
@@ -112,9 +113,9 @@ for subjIdx = 1:nSubjects
         [standPlv,standnPlv, standAmp] = computePhaseMetric(filteredstandingStruct,standingStruct.label,nPermutation);
         
     else
-        standPlv = zeros(1,nFilters);
-        standnPlv = zeros(1,nFilters);
-        standAmp = zeros(1,nFilters);
+        standPlv = zeros(nFilters,1);
+        standnPlv = zeros(nFilters,1);
+        standAmp = zeros(nFilters,1);
     end
     
     standingData{plotIdx,1} = standPlv;
@@ -156,9 +157,9 @@ for subjIdx = 1:nSubjects
         [restPlv, restnPlv, restAmp] = computePhaseMetric(restingStruct,restIdxStruct.label,nPermutation);
 
     else
-        restPlv = zeros(1,nFilters);
-        restnPlv = zeros(1,nFilters);
-        restAmp = zeros(1,nFilters);
+        restPlv = zeros(nFilters,1);
+        restnPlv = zeros(nFilters,1);
+        restAmp = zeros(nFilters,1);
     end
     
     restingData{plotIdx,1} = restPlv;
@@ -203,9 +204,9 @@ for subjIdx = 1:nSubjects
 
         
     else
-        walkPlv = zeros(1,nFilters);
-        walknPlv = zeros(1,nFilters);
-        walkAmp = zeros(1,nFilters);
+        walkPlv = zeros(nFilters,1);
+        walknPlv = zeros(nFilters,1);
+        walkAmp = zeros(nFilters,1);
     end
     
     walkingData{plotIdx,1} = walkPlv;
