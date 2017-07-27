@@ -26,14 +26,14 @@ end
 %% ===== GET DESCRIPTION =====
 function sProcess = GetDescription() %#ok<DEFNU>
 % Description the process
-sProcess.Comment     = 'Phase Synch';
+sProcess.Comment     = 'Phase Synch + surrogate';
 sProcess.FileTag     = '__';
 sProcess.Category    = 'Custom';
-sProcess.SubGroup    = 'SEEG';
+sProcess.SubGroup    = 'Connectivity';
 sProcess.Index       = 901;
 % Definition of the input accepted by this process
 sProcess.InputTypes  = {'data'};
-sProcess.OutputTypes = {'data'};
+sProcess.OutputTypes = {'timefreq'};
 sProcess.nInputs     = 1;
 sProcess.nMinFiles   = 1;
 
@@ -52,7 +52,6 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 	% init output PLV
 	DataMat = db_template('timefreqmat');
 
-
 	for fileIdx = 1:numel(sInputs) 
 			% read one file at time
 			data = in_bst_data(sInputs(fileIdx).FileName);
@@ -68,7 +67,8 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 			iStudy 							= sInputs(fileIdx).iStudy;    
 			DataMat.Comment     = 'cPLV';    
 			DataMat.ChannelFlag = data.ChannelFlag;% List of good/bad channels (1=good, -1=bad)    
-			DataMat.Time				= 1;
+
+            DataMat.Time				= [min(data.Time) max(data.Time)];
 			DataMat.Freqs				= [1 2];
 			DataMat.DataType    = 'data';    
 			DataMat.Method      = 'plv';    

@@ -76,39 +76,50 @@ end
 function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 		fs = 1000;
-		[filterSettings,fn] = generateFilterSettings(sProcess.options,fs);
+		[filterSettings,fn,filterStrings] = generateFilterSettings(sProcess.options,fs);
 		nFilters = size(filterSettings,1);
-		bst_progress('start','Filtering','Filtering');
+		
+		totElement = numel(sInputs)*nFilters;
 
-		totElement = numel(sInputs)+nFilters;
+		pBar = bst_progress('start','Filtering','Filtering',0,totElement);
+
 
 		for fileIdx = 1:numel(sInputs)
+
+				DataMat = in_bst_data(sInputs(fileIdx).FileName);
+
 				for fIdx = 1:nFilters
+						bst_progress('inc',(((fileIdx-1)*numel(sInputs))+fIdx));
 
-						bst_progress('inc',((fileIdx-1)*numel(sInputs))+fIdx);
-
-						DataMat = in_bst_data(sInputs(fileIdx).FileName);
 
 						fs = 1/mean(diff(DataMat.Time));
 
 						[filteredDataMat] = Compute(DataMat.F,filterSettings,fIdx);
 
 						% ===== SAVE THE RESULTS =====   
-						% Get the output study (pick the one from the first file)
-						iStudy 							= sInputs(fileIdx).iStudy;    
-						DataMat.Comment     = strcat('band ',num2str(fn));    
-						DataMat.F						= filteredDataMat;
-						DataMat.DataType    = 'data';    
-						DataMat.nAvg        = length(sInputs); % Number of epochs that were averaged to get this file    
+						filtDataMat 						= db_template('DataMat');
+						filtDataMat.History			= DataMat.History;
+						filtDataMat.Events			= DataMat.Events;
+						filtDataMat.Device			= DataMat.Device;
+						filtDataMat.DisplayUnits= DataMat.DisplayUnits;
+						filtDataMat.ChannelFlag = DataMat.ChannelFlag;
+						filtDataMat.Time 				= DataMat.Time;
+						filtDataMat.Comment     = strcat('Filtered Band-',num2str(fn(fIdx),'%.2f'));    
+						filtDataMat.F						= filteredDataMat;
+						filtDataMat.DataType    = 'data';    
+						filtDataMat.nAvg        = 1; 
+						filtDataMat 						= bst_history('add',filtDataMat,'filtering',filterStrings{fIdx});
 
 						% Create a default output filename     
 						OutputFiles{1} = bst_process('GetNewFilename', ...
 							fileparts(sInputs(fileIdx).FileName), 'data_band');    
 						% Save on disk    
-						save(OutputFiles{1}, '-struct', 'DataMat');    
+						save(OutputFiles{1}, '-struct', 'filtDataMat');    
 
 						% Register in database    
-						db_add_data(iStudy, OutputFiles{1}, DataMat);
+						db_add_data(sInputs(fileIdx).iStudy, OutputFiles{1}, filtDataMat);
+						clear filtDataMat;
+
 				end
 		end
 
@@ -137,7 +148,7 @@ function data = Compute(data,filterSettings,fIdx)
 end
 
 
-function [filterSettings,f] = generateFilterSettings(options,fs) 
+function [filterSettings,f,filterStrings] = generateFilterSettings(options,fs) 
 %GENERATEFILTERSETTINGS wrapper for designfilt 
 %	FILTERSETTINGS = GENERATEFILTERSETTINGS(SPROCESS.OPTIONS,FS) 
 %	This function should translate the sProcess.options into a cellarray of fields 
@@ -159,14 +170,18 @@ function [filterSettings,f] = generateFilterSettings(options,fs)
 
 	filterSettings = cell(nFilters,nHarmonics+1);
 
+	fprintf('FILTER SETTINGS:\n');
 	for fIdx = 1:nFilters
 
 			if fn > 100
 					m = sqrt(sqrt(2));
 			end
 
-			fprintf('[%f - %f] -> %f <- [%f - %f]\t',(fn / ws),(fn - (wb * fn)/2),fn,...
+			fprintf('\t[%.2f - %.2f] -> %.2f <- [%.2f - %.2f]\t',(fn / ws),(fn - (wb * fn)/2),fn,...
 					(fn + (wb * fn)/2),(min([0.95*(fs/2) fn * ws])));
+
+			filterStrings{fIdx} = sprintf('[%.2f - %.2f] -> %.2f <- [%.2f - %.2f]\t',(fn / ws),...
+					(fn - (wb * fn)/2),fn,(fn + (wb * fn)/2),(min([0.95*(fs/2) fn * ws])));
 	
 			passBandLp = (fn + (wb * fn)/2)/(fs/2);
 			passBandHp = (fn - (wb * fn)/2)/(fs/2);
@@ -187,14 +202,14 @@ function [filterSettings,f] = generateFilterSettings(options,fs)
 
 			
 			curHarmonics = find((harmonics > stopBandHp & harmonics < stopBandLp));
-			harmonics = harmonics.*(fs/2);
+			tmpHarmonics = harmonics.*(fs/2);
 
 			for harmIdx = curHarmonics
 					fprintf(' %f ', tmp(harmIdx));
 					filterSettings{fIdx,harmIdx} = {'bandstopfir',...
 							'FilterOrder',1500, ...
-		          'CutoffFrequency1',harmonics(harmIdx)-(str2num(options.bandStopWidth.Value)),...
-							'CutoffFrequency2',harmonics(harmIdx)+(str2num(options.bandStopWidth.Value)), ...
+		          'CutoffFrequency1',tmpHarmonics(harmIdx)-(str2num(options.bandStopWidth.Value)),...
+							'CutoffFrequency2',tmpHarmonics(harmIdx)+(str2num(options.bandStopWidth.Value)), ...
 							'SampleRate',fs};
 					
 			end
