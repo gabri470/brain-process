@@ -74,53 +74,107 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 
 					% read one file at time
 					data 				= in_bst_timefreq(sInputs(fileIdx).FileName);
-					channels 		= in_bst_channel(sInputs(fileIdx).ChannelFile);
-					
-					[adj, k] 		= computeAverageSingleSubject(data,channels);
 
-					EdgeData(subjIdx,fIdx) = adj;
-					K(subjIdx,fIdx) = k;
+					channels 		= in_bst_channel(sInputs(fileIdx).ChannelFile);
+					distMask		= createDistanceMask(channels);
+					
+					[PLV, kPLV,iPLV,kiPLV] = computeAverageSingleSubject(data,channels,distMask);
+
+					groupPLV(subjIdx,fIdx)  = PLV;
+					groupKPLV(subjIdx,fIdx) = kPLV;
+					groupiPLV(subjIdx,fIdx) = iPLV;
+					groupKiPLV(subjIdx,fIdx)= kiPLV;
+
 			end	
 	end
 	
 	figure,
-	subplot(2,1,1)
-	semilogx(f,mean(EdgeData,1));
+	subplot(2,2,1)
+	semilogx(f,mean(groupPLV,1));
+	xlim([min(f), max(f)]);
 	ylabel('PLV')
-	subplot(2,1,2)
-	semilogx(f,mean(K,1));
+	xlabel('Frequency');
+	subplot(2,2,2)
+	semilogx(f,mean(groupKPLV,1));
 	ylabel('K')
 	xlabel('Frequency');
+	xlim([min(f), max(f)]);
+	subplot(2,2,3)
+	semilogx(f,mean(groupiPLV,1));
+	xlim([min(f), max(f)]);
+	ylabel('iPLV')
+	xlabel('Frequency');
+	subplot(2,2,4)
+	semilogx(f,mean(groupKiPLV,1));
+	ylabel('K')
+	xlabel('Frequency');
+	xlim([min(f), max(f)]);
 
 
-
-	OutputFiles{1} = 0;
+	OutputFiles = {};
 
 end
 
-function [adj,k] = computeAverageSingleSubject(data,channels)
+function [PLV,iPLV,kPLV,kiPLV] = computeAverageSingleSubject(data,channels,mask)
 %COMPUTEAVERAGESINGLESUBJECT Description
 %	ADJ = COMPUTEAVERAGESINGLESUBJECT(DATAIN) Long description
 %
 			nChans 			= numel(channels.Channel);
 
-%			cPLV				= complex(zeros(nChans),zeros(nChans));
-%			cPLVSurr		= complex(zeros(nChans),zeros(nChans));
-	
-			cPLV				= zeros(nChans);
+			cPLV				= complex(zeros(nChans),zeros(nChans));
 
 			mask				= reshape(1:(nChans^2),[nChans,nChans]);
 
-			cPLV(triu(mask)~=0) = abs(squeeze(data.TF(:,:,1)));
+			cPLV(triu(mask)~=0) = (squeeze(data.TF(:,:,1)));
 
 			cPLV(diag(mask)) = 0;
 
 			PLVSurrMean = mean(squeeze(abs(data.TF(:,:,2))));
 
-			k = sum(sum(((abs(cPLV)./PLVSurrMean) > 2.42)))/nchoosek(nChans,2);
+			iPLVConfLimit = std(squeeze(abs(imag(data.TF(:,:,2)))))*2.5758;
+			PLVConfLimit = PLVSurrMean*2.42;
 
-			cPLV((abs(cPLV)./PLVSurrMean) < 2.42) = 0;
+			PLV = abs(cPLV);
+			iPLV= abs(imag(cPLV));
 
-		  adj = mean(abs(cPLV( cPLV ~= 0 )));
+			PLV(PLV <= PLVConfLimit) = 0;
+			iPLV(iPLV <= iPLVConfLimit) = 0;
+
+			PLV(~mask) = 0;
+			iPLV(~mask) = 0;
+
+
+			kPLV = sum(sum(((PLV > PLVConfLimit))))/nchoosek(nChans,2);
+			kiPLV= sum(sum(((iPLV > iPLVConfLimit)))) / nchoosek(nChans,2);
+
+		  PLV = mean((PLV( PLV ~= 0 )));
+			iPLV= mean((iPLV( iPLV ~= 0)));
+
+end
+
+function mask = createSameReferenceMask(channels)
+%CREATESAMEREFERENCEMASK Description
+%	MASK = CREATESAMEREFERENCEMASK(CHANNELS) Long description
+%
+
+channelNames = [{channels.Channel.Name}];
+
+nChans = numel(channelNames);
+mask = ones(nChans);
+
+for channelIdx = 1:nChans
+	currLabels = strsplit(channelNames{channelIdx},'-');
+
+	rowMask = ~cellfun(@isempty,regexp(channelNames,regexprep(...
+			(strjoin(['(^', currLabels(1),'-|-',currLabels(1),'$)'])),'\s','')));
+	mask(channelIdx,rowMask) = 0;
+
+	rowMask = ~cellfun(@isempty,regexp(channelNames,regexprep(...
+			(strjoin(['(^', currLabels(2),'-|-',currLabels(2),'$)'])),'\s','')));
+
+	mask(channelIdx,rowMask) = 0;
+
+end
+	
 
 end

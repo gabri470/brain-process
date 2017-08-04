@@ -75,7 +75,7 @@ end
 %% ===== RUN =====
 function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
-		fs = 1000;
+		fs = 5000;
 		[filterSettings,fn,filterStrings] = generateFilterSettings(sProcess.options,fs);
 		nFilters = size(filterSettings,1);
 		
@@ -85,30 +85,24 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
 
 		for fileIdx = 1:numel(sInputs)
-
 				DataMat = in_bst_data(sInputs(fileIdx).FileName);
 
 				for fIdx = 1:nFilters
 						bst_progress('inc',(((fileIdx-1)*numel(sInputs))+fIdx));
 
-
 						fs = 1/mean(diff(DataMat.Time));
 
-						[filteredDataMat] = Compute(DataMat.F,filterSettings,fIdx);
+						[filteredDataMat] = Compute(DataMat.F',filterSettings,fIdx,fs);
 
 						% ===== SAVE THE RESULTS =====   
-						filtDataMat 						= db_template('DataMat');
-						filtDataMat.History			= DataMat.History;
-						filtDataMat.Events			= DataMat.Events;
-						filtDataMat.Device			= DataMat.Device;
-						filtDataMat.DisplayUnits= DataMat.DisplayUnits;
-						filtDataMat.ChannelFlag = DataMat.ChannelFlag;
-						filtDataMat.Time 				= DataMat.Time;
-						filtDataMat.Comment     = strcat('Filtered Band-',num2str(fn(fIdx),'%.2f'));    
-						filtDataMat.F						= filteredDataMat;
-						filtDataMat.DataType    = 'data';    
-						filtDataMat.nAvg        = 1; 
-						filtDataMat 						= bst_history('add',filtDataMat,'filtering',filterStrings{fIdx});
+						filtDataMat 					= db_template('DataMat');
+						filtDataMat						= DataMat;
+						iStudy 								= sInputs(fileIdx).iStudy;    
+						filtDataMat.Comment   = strcat('Filtered Band-',num2str(fn(fIdx),'%.2f'));    
+						filtDataMat.F					= filteredDataMat';
+						filtDataMat.DataType  = 'data';    
+						filtDataMat.nAvg      = 1; 
+						filtDataMat 					= bst_history('add',filtDataMat,'filtering',filterStrings{fIdx});
 
 						% Create a default output filename     
 						OutputFiles{1} = bst_process('GetNewFilename', ...
@@ -117,7 +111,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 						save(OutputFiles{1}, '-struct', 'filtDataMat');    
 
 						% Register in database    
-						db_add_data(sInputs(fileIdx).iStudy, OutputFiles{1}, filtDataMat);
+						db_add_data(iStudy, OutputFiles{1}, filtDataMat);
 						clear filtDataMat;
 
 				end
@@ -126,49 +120,36 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 end
 
 
-function data = Compute(data,filterSettings,fIdx)
+function data = Compute(data,filterSettings,fIdx,fs)
 
-		[nFilters,nHarmonics] = size(filterSettings);
-
-		for hIdx = 1:nHarmonics
-				if ~isempty(filterSettings{fIdx,hIdx})
-								 
-						filt = designfilt(filterSettings{fIdx,hIdx}{:});
-
-						filtDelay = round(mean(grpdelay(filt)));
-						
-						data = [data, flipud(data(:,end-filtDelay+1:end))];
-						data = (filter(filt, data'))';
-						data = data(:,filtDelay+1:end);
-				end
-
-		end
+		% data T x CH Input => output
+		data = bandpass_FIR_filter(data,fs,filterSettings{fIdx,1});
+		data = bandstop_FIR_filter(data,fs,filterSettings{fIdx,2});
 
 
 end
 
 
-function [filterSettings,f,filterStrings] = generateFilterSettings(options,fs) 
+function [filterSettings,fn,filterStrings] = generateFilterSettings(options,fs) 
 %GENERATEFILTERSETTINGS wrapper for designfilt 
 %	FILTERSETTINGS = GENERATEFILTERSETTINGS(SPROCESS.OPTIONS,FS) 
 %	This function should translate the sProcess.options into a cellarray of fields 
 %	that can be easily passed to designfilt
 
+	nFilters 		= str2num(options.nFilters.Value);
+	fn 			 		= str2num(options.minFreq.Value);
+	wb			 		= str2num(options.bandFlatTop.Value);
+	ws			 		= str2num(options.stopBand.Value);
+	m				 		= str2num(options.scalingFactor.Value);
+	stopBandWb	= str2num(options.bandStopWidth.Value);
 
-	nFilters 	= str2num(options.nFilters.Value);
-	fn 			 	= str2num(options.minFreq.Value);
-	wb			 	= str2num(options.bandFlatTop.Value);
-	ws			 	= str2num(options.stopBand.Value);
-	m				 	= str2num(options.scalingFactor.Value);
+	f 			 		= zeros(nFilters,1);
+	fnyq		 		= fs/2;
+	lineNoise		= 50;
+	harmonics		= linspace(50,fs/2,(fs/2)/50);
+	nHarmonics	= numel(harmonics);
 
-	f 			 	= zeros(nFilters,1);
-	fnyq		 	= fs/2;
-	lineNoise	= 50;
-	harmonics	= linspace(50,fs/2,(fs/2)/50)/(fs/2);
-	tmp 			= linspace(50,fs/2,(fs/2)/50);
-	nHarmonics= numel(harmonics);
-
-	filterSettings = cell(nFilters,nHarmonics+1);
+	filterSettings = cell(nFilters,2);
 
 	fprintf('FILTER SETTINGS:\n');
 	for fIdx = 1:nFilters
@@ -183,39 +164,101 @@ function [filterSettings,f,filterStrings] = generateFilterSettings(options,fs)
 			filterStrings{fIdx} = sprintf('[%.2f - %.2f] -> %.2f <- [%.2f - %.2f]\t',(fn / ws),...
 					(fn - (wb * fn)/2),fn,(fn + (wb * fn)/2),(min([0.95*(fs/2) fn * ws])));
 	
-			passBandLp = (fn + (wb * fn)/2)/(fs/2);
-			passBandHp = (fn - (wb * fn)/2)/(fs/2);
-			stopBandLp = (min([0.95*(fs/2) fn * ws]))/(fs/2);
-			stopBandHp = (fn / ws)/(fs/2);
+			passBandLp = (fn + (wb * fn)/2);
+			passBandHp = (fn - (wb * fn)/2);
+			stopBandLp = (min([0.95*(fs/2) fn * ws]));
+			stopBandHp = (fn / ws);
 
-			f(fIdx) = fn;
-			fn = fn * m;
+			transitionBand = [passBandHp - stopBandHp, stopBandLp - passBandLp];
 
-			filterSettings{fIdx,end} = {'bandpassfir',...
-					'StopbandFrequency1',stopBandHp,...
-					'PassbandFrequency1',passBandHp,...
-					'PassbandFrequency2',passBandLp,...
-					'StopbandFrequency2',stopBandLp,...
-					'StopbandAttenuation1',80,...
-					'StopbandAttenuation2',80,...
-					'DesignMethod','kaiserwin'};
+			f(fIdx) 	 = fn;
+			fn 				 = fn * m;
 
-			
-			curHarmonics = find((harmonics > stopBandHp & harmonics < stopBandLp));
-			tmpHarmonics = harmonics.*(fs/2);
+			% [x, FiltSpec, Messages] = bandpass_FIR_filter(x, Fs, HighPass,LowPass,transitionBand,attenuation,removeDC, isMirror, Function)
+			[~,filtSpec] = bandpass_FIR_filter([],fs,passBandHp,passBandLp,transitionBand,[],[],1);
+			filterSettings{fIdx,1} = filtSpec; 
 
-			for harmIdx = curHarmonics
-					fprintf(' %f ', tmp(harmIdx));
-					filterSettings{fIdx,harmIdx} = {'bandstopfir',...
-							'FilterOrder',1500, ...
-		          'CutoffFrequency1',tmpHarmonics(harmIdx)-(str2num(options.bandStopWidth.Value)),...
-							'CutoffFrequency2',tmpHarmonics(harmIdx)+(str2num(options.bandStopWidth.Value)), ...
-							'SampleRate',fs};
+			%	curHarmonics contains the harmonics of 50Hz in the band of interest
+			curHarmonics = harmonics(harmonics > stopBandHp & harmonics < stopBandLp);
+
+			% [x, FiltSpec, Messages] = bandstop_FIR_filter(x, Fs, notch_freq_list,transition_band,attenuation, isMirror, Function)
+			[~,filtSpec] = bandstop_FIR_filter([],fs,curHarmonics,[stopBandWb,stopBandWb],80,1);
+			filterSettings{fIdx,2} = filtSpec;
 					
-			end
 			fprintf('\n');
 
 	end
 
 end
 
+
+%function [filterSettings,f,filterStrings] = generateFilterSettings(options,fs) 
+%%GENERATEFILTERSETTINGS wrapper for designfilt 
+%%	FILTERSETTINGS = GENERATEFILTERSETTINGS(SPROCESS.OPTIONS,FS) 
+%%	This function should translate the sProcess.options into a cellarray of fields 
+%%	that can be easily passed to designfilt
+%
+%
+%	nFilters 	= str2num(options.nFilters.Value);
+%	fn 			 	= str2num(options.minFreq.Value);
+%	wb			 	= str2num(options.bandFlatTop.Value);
+%	ws			 	= str2num(options.stopBand.Value);
+%	m				 	= str2num(options.scalingFactor.Value);
+%
+%	f 			 	= zeros(nFilters,1);
+%	fnyq		 	= fs/2;
+%	lineNoise	= 50;
+%	harmonics	= linspace(50,fs/2,(fs/2)/50)/(fs/2);
+%	tmp 			= linspace(50,fs/2,(fs/2)/50);
+%	nHarmonics= numel(harmonics);
+%
+%	filterSettings = cell(nFilters,nHarmonics+1);
+%
+%	fprintf('FILTER SETTINGS:\n');
+%	for fIdx = 1:nFilters
+%
+%			if fn > 100
+%					m = sqrt(sqrt(2));
+%			end
+%
+%			fprintf('\t[%.2f - %.2f] -> %.2f <- [%.2f - %.2f]\t',(fn / ws),(fn - (wb * fn)/2),fn,...
+%					(fn + (wb * fn)/2),(min([0.95*(fs/2) fn * ws])));
+%
+%			filterStrings{fIdx} = sprintf('[%.2f - %.2f] -> %.2f <- [%.2f - %.2f]\t',(fn / ws),...
+%					(fn - (wb * fn)/2),fn,(fn + (wb * fn)/2),(min([0.95*(fs/2) fn * ws])));
+%	
+%			passBandLp = (fn + (wb * fn)/2)/(fs/2);
+%			passBandHp = (fn - (wb * fn)/2)/(fs/2);
+%			stopBandLp = (min([0.95*(fs/2) fn * ws]))/(fs/2);
+%			stopBandHp = (fn / ws)/(fs/2);
+%
+%			f(fIdx) = fn;
+%			fn = fn * m;
+%
+%			filterSettings{fIdx,end} = {'bandpassfir',...
+%					'StopbandFrequency1',stopBandHp,...
+%					'PassbandFrequency1',passBandHp,...
+%					'PassbandFrequency2',passBandLp,...
+%					'StopbandFrequency2',stopBandLp,...
+%					'StopbandAttenuation1',80,...
+%					'StopbandAttenuation2',80,...
+%					'DesignMethod','kaiserwin'};
+%
+%			
+%			curHarmonics = find((harmonics > stopBandHp & harmonics < stopBandLp));
+%			tmpHarmonics = harmonics.*(fs/2);
+%
+%			for harmIdx = curHarmonics
+%					fprintf(' %f ', tmp(harmIdx));
+%					filterSettings{fIdx,harmIdx} = {'bandstopfir',...
+%							'FilterOrder',1500, ...
+%		          'CutoffFrequency1',tmpHarmonics(harmIdx)-(str2num(options.bandStopWidth.Value)),...
+%							'CutoffFrequency2',tmpHarmonics(harmIdx)+(str2num(options.bandStopWidth.Value)), ...
+%							'SampleRate',fs};
+%					
+%			end
+%			fprintf('\n');
+%
+%	end
+%
+%end
