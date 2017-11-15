@@ -75,7 +75,9 @@ end
 %% ===== RUN =====
 function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 
-		fs = 5000;
+
+		time = in_bst_data(sInputs(1).FileName,'Time');
+		fs   = 1/mean(diff(time.Time));
 		[filterSettings,fn,filterStrings] = generateFilterSettings(sProcess.options,fs);
 		nFilters = size(filterSettings,1);
 		
@@ -88,12 +90,13 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 				DataMat = in_bst_data(sInputs(fileIdx).FileName);
 
 				for fIdx = 1:nFilters
-						bst_progress('inc',(((fileIdx-1)*numel(sInputs))+fIdx));
+						bst_progress('text',sprintf('Filter %d/%d for file %d/%d',fIdx,nFilters,fileIdx,numel(sInputs)));
 
 						fs = 1/mean(diff(DataMat.Time));
 
 						[filteredDataMat] = Compute(DataMat.F',filterSettings,fIdx,fs);
 
+						bst_progress('text',sprintf('Saving %d/%d for file %d/%d',fIdx,nFilters,fileIdx,numel(sInputs)));
 						% ===== SAVE THE RESULTS =====   
 						filtDataMat 					= db_template('DataMat');
 						filtDataMat						= DataMat;
@@ -113,6 +116,7 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
 						% Register in database    
 						db_add_data(iStudy, OutputFiles{1}, filtDataMat);
 						clear filtDataMat;
+						bst_progress('inc',(((fileIdx-1)*nFilters)+fIdx));
 
 				end
 		end
@@ -130,7 +134,7 @@ function data = Compute(data,filterSettings,fIdx,fs)
 end
 
 
-function [filterSettings,fn,filterStrings] = generateFilterSettings(options,fs) 
+function [filterSettings,f,filterStrings] = generateFilterSettings(options,fs) 
 %GENERATEFILTERSETTINGS wrapper for designfilt 
 %	FILTERSETTINGS = GENERATEFILTERSETTINGS(SPROCESS.OPTIONS,FS) 
 %	This function should translate the sProcess.options into a cellarray of fields 

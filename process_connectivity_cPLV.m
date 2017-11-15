@@ -1,4 +1,4 @@
-function varargout = process_seeg_testCohort( varargin )
+function varargout = process_connectivity_cPLV( varargin )
 
 % @=============================================================================
 % This software is part of the Brainstorm software:
@@ -57,7 +57,7 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 			data = in_bst_data(sInputs(fileIdx).FileName);
 			channels = in_bst_channel(sInputs(fileIdx).ChannelFile);
 
-			% [plv, nPLV, amp] = computePhaseMetric(data,nPermutation) 
+			% [plv, nPLV, amp] = computePhaseMetric(data,nPermutation,method) 
 			edgeData = computePhaseMetric(data, 3,'plv');
 
 			% ===== SAVE THE RESULTS =====   
@@ -68,7 +68,7 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 			DataMat.Comment     = 'cPLV';    
 			DataMat.ChannelFlag = data.ChannelFlag;% List of good/bad channels (1=good, -1=bad)    
 
-            DataMat.Time				= [min(data.Time) max(data.Time)];
+      DataMat.Time				= [min(data.Time) max(data.Time)];
 			DataMat.Freqs				= [1 2];
 			DataMat.DataType    = 'data';    
 			DataMat.Method      = 'plv';    
@@ -91,7 +91,9 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 end
 
 function [edgeData] = computePhaseMetric(data,nPermutation,metric)
-% Description
+% Description Indeed wpli requires the crossspect to be computed ... 
+% 			thus probably it cannot be included directly here 
+% 			pTE can but requires an ad hoc function to estimate MI
 %	[PTE,PLV, F] = computePhaseMetric(data,channelNames)
 
 switch metric
