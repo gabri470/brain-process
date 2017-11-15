@@ -176,7 +176,7 @@ function [filterSettings,f,filterStrings] = generateFilterSettings(options,fs)
 			transitionBand = [passBandHp - stopBandHp, stopBandLp - passBandLp];
 
 			f(fIdx) 	 = fn;
-			fn 				 = fn * m;
+			fn 			 = fn * m;
 
 			% [x, FiltSpec, Messages] = bandpass_FIR_filter(x, Fs, HighPass,LowPass,transitionBand,attenuation,removeDC, isMirror, Function)
 			[~,filtSpec] = bandpass_FIR_filter([],fs,passBandHp,passBandLp,transitionBand,[],[],1);

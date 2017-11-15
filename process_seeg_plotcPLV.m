@@ -76,7 +76,7 @@ function OutputFiles = Run(~, sInputs) %#ok<DEFNU>
 					data 				= in_bst_timefreq(sInputs(fileIdx).FileName);
 
 					channels 		= in_bst_channel(sInputs(fileIdx).ChannelFile);
-					distMask		= createDistanceMask(channels);
+					distMask		= createSameReferenceMask(channels);
 					
 					[PLV, kPLV,iPLV,kiPLV] = computeAverageSingleSubject(data,channels,distMask);
 
