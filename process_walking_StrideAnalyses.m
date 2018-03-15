@@ -66,6 +66,8 @@ end
 
 %% ===== RUN =====
 function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
+%% TODO remove %%
+close all;
 
 nFiles = numel(sInputs);
 
@@ -178,21 +180,22 @@ for fileIdx = fileIndices
     strideStart 	= strideStart - evOffset;
     
     % we create the normalized stride time vector
-    referenceTimeVector = -1:1/fs:(1.5-1/fs);
+%     referenceTimeVector = -1:1/fs:(1.5-1/fs);
+    
     doubleSuppDur 		= floor(0.19*fs);
     singleSuppDur 		= floor(0.4*fs);
     acPhaseDur			= floor((.4*2/3)*fs);
     decPhaseDur			= floor((.4/3)*fs);
     
     % create the reference vector for morphing
-    referenceStance 		= 400 + [ -doubleSuppDur-acPhaseDur...
+    referenceStance 	= 400 + [ -doubleSuppDur-acPhaseDur...
         -acPhaseDur 0 +decPhaseDur ...
         +doubleSuppDur+decPhaseDur ...
         +doubleSuppDur+decPhaseDur+acPhaseDur ...
         +doubleSuppDur+decPhaseDur+singleSuppDur ...
         +doubleSuppDur+decPhaseDur+singleSuppDur+doubleSuppDur];
         
-    referenceVector			= [1 referenceStance 1000];
+    referenceVector		= [1 referenceStance 1000];
     plotIdx = 1;
     
     % strideCheck = evNames(bsxfun(@plus,(-2:4),(3:2:numel(evNames)-2)'));
@@ -202,8 +205,8 @@ for fileIdx = fileIndices
     
     % check that data are ordered correctly for each stride
     matchingString = {'heelcontact_[L|R]', 'toeoff_[R|L]',...
-        'peakVeloc_[R|L]',...
-        'heelcontact_[R|L]','toeoff_[L|R]','peakVeloc_[L|R]',...
+        'peakVeloc_[R|L]','heelcontact_[R|L]',...
+        'toeoff_[L|R]','peakVeloc_[L|R]',...
         'heelcontact_[L|R]','toeoff_[R|L]'};
         
     for strideIdx = peakVelocIdx(peakVelocMask)
@@ -226,6 +229,9 @@ for fileIdx = fileIndices
         % (hc_L) *tof_R  hc_R   *tof_L (hc_L)
         %    ^ start-2		|t0				      ^ start + 2 == end stride
         timeWindow = strideStart(strideIdx) + (-499:500);
+        
+        % we take into account 2.5 seconds long time window centered at
+        % peakVelocity
         freqMask 	 = walkingStruct.Freqs > 6;
         dataTF 		 = abs(walkingStruct.TF(:,timeWindow,freqMask)).^2;
         
@@ -250,7 +256,7 @@ for fileIdx = fileIndices
         strideRaw = signals(:,timeWindow)';
         f 		  = walkingStruct.Freqs(freqMask);
         
-        % then create the time-warping vector
+        % then create the time-warping vector in samples
         originalVector = [1 (strideStart((-2:5) + strideIdx)...
             - timeWindow(1))  1000];
         
@@ -269,8 +275,9 @@ for fileIdx = fileIndices
             finalRaw(1,:) = mixingMatrix * strideRaw(:,1);
             finalRaw(2,:) = mixingMatrix * strideRaw(:,2);
             
-            tAxis	= referenceTimeVector;
-            tEvAxis = repmat(referenceTimeVector(referenceStance(2:end-1)),2, 1);
+            tAxis	= [-499:500]./fs;
+%             tEvAxis = repmat(referenceTimeVector(referenceStance(2:end-1)),2, 1);
+            tEvAxis = repmat((referenceStance(1:end-1)-400)./400,2,1);
             
         else
             %	finalTF 	= dataTF.*1e12;
@@ -294,11 +301,11 @@ for fileIdx = fileIndices
             if strcmp(mostAffSide,'L')
                 % if STN- is L => this swing is relative to
                 % STN+ => plot on right side of page
-                stnIdx					= 2;
+                stnIdx = 2;
             else
                 % if STN- is R => this swing is relative
                 % to STN- => plot on left side of page
-                stnIdx					= 1;
+                stnIdx = 1;
             end
         else
             % right foot swing
@@ -306,17 +313,18 @@ for fileIdx = fileIndices
             if strcmp(mostAffSide,'L')
                 % if STN- is R => this swing is relative
                 % to STN- => plot on left side of page
-                stnIdx					= 1;
+                stnIdx = 1;
             else
                 % if STN- is L => this swing is relative to
                 % STN+ => plot on right side of page
-                stnIdx					= 2;
+                stnIdx = 2;
             end
         end
         
         stridePhaseDur{subjectIdx,stnIdx} = ...
             cat(1,stridePhaseDur{subjectIdx,stnIdx},...
             diff(originalVector));
+        
         % we save for each subject the time-warped ERSD normalized over***
         stnRawResults{subjectIdx,stnIdx} = ...
             cat(1,stnRawResults{subjectIdx,stnIdx},...
@@ -342,55 +350,75 @@ f3 = figure('papertype','a4','paperorientation','portrait','Visible','on');
 colormap(jet(256));
 %
 
-lowBetaMask = f >= 6 & f <= 19;
-highBetaMask = f >= 20 & f <= 35;
-gammaMask  = f > 35 & f < 80;
+lowBetaMask = f >= 8 & f <= 16;
+highBetaMask = f > 16 & f <= 30;
+gammaMask  = f > 30 & f < 80;
 
-patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
+% patientsOrder = {'wue03','wue09','wue04','wue02','wue10','wue07','wue06','wue11'};
+patientsOrder = {'wue09','wue04','wue02','wue07','wue06'};
 [~,ord] = ismember(patientsOrder,subjectNameOrdered);
 
 plotIdx = 1;
-method = 2;
+% method 3 == ERSD - EEGLAB gain model (Grandchamp Delorme Front. 
+method = 3;
 
+tEvAxis = tEvAxis(:,1:4);
+
+% groupStnMostAffERSD
+% groupStnLessAffERSD
+
+% loop across subjects
 for ii = ord
-    
+    % for a given subject get data in the form
+    % trial x time x freq. 
     stnMostAff = stnRawResults{ii,1};
     stnLessAff = stnRawResults{ii,2};
     
     stnMostAffERSD = computeERSD(stnMostAff,referenceStance,method);
     stnLessAffERSD = computeERSD(stnLessAff,referenceStance,method);
     
-    [pvalue(1,:,:), unCorrPvalue(1,:,:)] = ...
-        runPermutationTest(stnMostAffERSD,...
-        stnMostAff,100,referenceStance,method);
-    [pvalue(2,:,:), unCorrPvalue(2,:,:)] = ...
-        runPermutationTest(stnLessAffERSD,...
-        stnLessAff,100,referenceStance,method);
-        
     groupStnMostAffERSD(ii,:,:,:) = stnMostAffERSD;
     groupStnLessAffERSD(ii,:,:,:) = stnLessAffERSD;
+%     [pvalue(1,:,:), unCorrPvalue(1,:,:)] = ...
+%         runPermutationTest(stnMostAffERSD,...
+%         stnMostAff,100,referenceStance,method);
+%     
+%     [pvalue(2,:,:), unCorrPvalue(2,:,:)] = ...
+%         runPermutationTest(stnLessAffERSD,...
+%         stnLessAff,100,referenceStance,method);
+      
+
+    [pvalue(1,:,:), unCorrPvalue(1,:,:)] = ...
+        runStatisticalValidationERSP(stnMostAffERSD,...
+        stnMostAff,100,referenceStance,method);
+    
+    [pvalue(2,:,:), unCorrPvalue(2,:,:)] = ...
+        runStatisticalValidationERSP(stnLessAffERSD,...
+        stnLessAff,100,referenceStance,method);
     
     statSignificance = zeros(size(pvalue));
-    statSignificance(pvalue < 0.05) = 1;
+    statSignificance(unCorrPvalue < 0.05) = 1;
     
     ax1=subplot(nSubjects,2,2*(plotIdx-1)+1,'NextPlot','add');
-    imagesc(tAxis,f,stnMostAffERSD');
-    plot(tEvAxis,repmat([min(f);60],[1 6]),'k--');
+    h=imagesc(tAxis,f(lowBetaMask | highBetaMask | gammaMask), stnMostAffERSD(:,(lowBetaMask | highBetaMask | gammaMask))',[-3 3]);
+    h.AlphaData = squeeze(statSignificance(1,:,(lowBetaMask | highBetaMask | gammaMask)))';
+    plot(tEvAxis,repmat([min(f);60],[1 numel(tEvAxis(1,:))]),'k--');
     axis xy;
-    set(gca,'XTickLabel',[]);
+    
+    set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc'});
     xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
-    ylim([6 60]);
-    set(ax1,'Parent',f2);
-    
-    
+    ylim([min(f(lowBetaMask | highBetaMask | gammaMask)), max(f(lowBetaMask | highBetaMask | gammaMask))]);
+ 
+    set(ax1,'Parent',f2);  
     ax2=subplot(nSubjects,2,2*(plotIdx-1)+2,'NextPlot','add');
-    imagesc(tAxis,f,stnLessAffERSD');
-    plot(tEvAxis,repmat([min(f);60],[1 6]),'k--');
+    h=imagesc(tAxis,f(lowBetaMask | highBetaMask| gammaMask),stnLessAffERSD(:,(lowBetaMask | highBetaMask | gammaMask))',[-3 3]);
+    h.AlphaData = squeeze(statSignificance(2,:,(lowBetaMask | highBetaMask| gammaMask)))';
+    plot(tEvAxis,repmat([min(f);60],[1 numel(tEvAxis(1,:))]),'k--');
     xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
     axis xy;
-    set(gca,'XTickLabel',[]);
-    ylim([6 60]);
+    set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc'});
     
+    ylim([min(f(lowBetaMask | highBetaMask| gammaMask)), max(f(lowBetaMask | highBetaMask| gammaMask))]);
     annotation('textbox',[0.05, 0.85-(plotIdx-1)*0.1, 0.1, 0.05],...
         'String',subjectNameOrdered{ii},'LineStyle','None');
     set(gca,'Parent',f2);
@@ -399,18 +427,22 @@ for ii = ord
     plot(tAxis,mean(stnMostAffERSD(:,highBetaMask),2),'r');
     plot(tAxis,mean(stnMostAffERSD(:,lowBetaMask),2),'g');
     plot(tAxis,mean(stnMostAffERSD(:,gammaMask),2),'b');
-    plot(tEvAxis,repmat([-2;2],[1 6]),'k--');
+    plot(tEvAxis,repmat([-2;2],[1 numel(tEvAxis(1,:))]),'k--');
 
     xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+    set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc'});
+    ylim([-1 1]);
     set(ax3,'Parent',f3);
     
     ax4=subplot(nSubjects,2,2*(plotIdx-1)+2,'NextPlot','add');
     plot(tAxis,mean(stnLessAffERSD(:,highBetaMask),2),'r');
     plot(tAxis,mean(stnLessAffERSD(:,lowBetaMask),2),'g');
     plot(tAxis,mean(stnLessAffERSD(:,gammaMask),2),'b');
-    plot(tEvAxis,repmat([-2;2],[1 6]),'k--')
+    plot(tEvAxis,repmat([-2;2],[1 numel(tEvAxis(1,:))]),'k--')
 
     xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+    ylim([-1 1]);
+    set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc'});
     annotation('textbox',[0.05, 0.85-(plotIdx-1)*0.1, 0.1, 0.05],...
         'String',subjectNameOrdered{ii},'LineStyle','None');
     set(ax4,'Parent',f3);
@@ -423,6 +455,24 @@ annotation('textbox',[0.30,0.950,0.1,0.05],'String','STN-','LineStyle','None');
 annotation('textbox',[0.70,0.950,0.1,0.05],'String','STN+','LineStyle','None');
 
 %% group level test
+grpStnMostAff = squeeze(mean(groupStnMostAffERSD));
+grpStnLessAff = squeeze(mean(groupStnLessAffERSD));
+figure,
+colormap(jet(256));
+subplot(1,2,1)
+imagesc(tAxis,f,grpStnMostAff',[-2 2]);
+xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+ylim([min(f) 30]);
+axis xy;
+set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc'});
+
+subplot(1,2,2)
+imagesc(tAxis,f,grpStnLessAff',[-2 2]);
+xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+ylim([min(f) 30]);
+axis xy;
+set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc'});
+
 figure,
 grpStnMostHighBeta = squeeze(mean(groupStnMostAffERSD(:,:,highBetaMask),3));
 grpStnLessHighBeta = squeeze(mean(groupStnLessAffERSD(:,:,highBetaMask),3));
@@ -438,6 +488,7 @@ grpStnLessGamma    = squeeze(mean(groupStnLessAffERSD(:,:,gammaMask),3));
 [grpStnMostGammaCL, grpStnMostGammaMean]      = myBootstrap(grpStnMostGamma,nSubjects,10);
 [grpStnLessGammaCL, grpStnLessGammaMean]      = myBootstrap(grpStnLessGamma,nSubjects,10);
 
+
 %% compare STN- and STN+ for LowBeta
 p = mySignrank(grpStnMostLowBeta-grpStnLessLowBeta);
 
@@ -446,11 +497,13 @@ plot(tAxis,grpStnMostLowBetaMean,'Color',[0 109 219]./255);
 plot(tAxis,grpStnLessLowBetaMean,'Color',[255 109 182]./255);
 fill_between(tAxis,grpStnMostLowBetaCL(1,:),grpStnMostLowBetaCL(2,:),tAxis,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
 fill_between(tAxis,grpStnLessLowBetaCL(1,:),grpStnLessLowBetaCL(2,:),tAxis,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
-plot(tAxis,(p<0.05)*0.5,'*');
-plot(tEvAxis,repmat([-2;2],[1 6]),'k--')
+
+plot(tAxis(p<(0.05/numel(p))),grpStnMostLowBetaMean(p<(0.05/numel(p))),'s','MarkerFaceColor',[0 109 219]./255,'MarkerEdgeColor','none');
+plot(tAxis(p<(0.05/numel(p))),grpStnLessLowBetaMean(p<(0.05/numel(p))),'s','MarkerFaceColor',[255 109 182]./255,'MarkerEdgeColor','none');
+plot(tEvAxis,repmat([-2;2],[1 numel(tEvAxis(1,:))]),'k--')
 set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc','To'});
-xlim([-0.5 1]);
-ylim([-.5 .5]);
+xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+% ylim([-.5 .5]);
 
 %% compare STN- and STN+ for highBeta
 p = mySignrank(grpStnMostHighBeta-grpStnLessHighBeta);
@@ -459,13 +512,14 @@ subplot(3,1,2,'NextPlot','add')
 plot(tAxis,grpStnMostHighBetaMean,'Color',[0 109 219]./255)
 plot(tAxis,grpStnLessHighBetaMean,'Color',[255 109 182]./255);
 legend({'STN-','STN+'});
-plot(tAxis,(p<0.05)*0.5,'*');
+plot(tAxis(p<(0.05/numel(p))),grpStnMostHighBetaMean(p<(0.05/numel(p))),'s','MarkerFaceColor',[0 109 219]./255,'MarkerEdgeColor','none')
+plot(tAxis(p<(0.05/numel(p))),grpStnLessHighBetaMean(p<(0.05/numel(p))),'s','MarkerFaceColor',[255 109 182]./255,'MarkerEdgeColor','none');
 fill_between(tAxis,grpStnMostHighBetaCL(1,:),grpStnMostHighBetaCL(2,:),tAxis,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
 fill_between(tAxis,grpStnLessHighBetaCL(1,:),grpStnLessHighBetaCL(2,:),tAxis,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
 set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc','To'});
-plot(tEvAxis,repmat([-2;2],[1 6]),'k--')
-xlim([-0.5 1]);
-ylim([-.5 .5]);
+plot(tEvAxis,repmat([-2;2],[1 numel(tEvAxis(1,:))]),'k--')
+xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+% ylim([-.5 .5]);
 
 %% compare STN- and STN+ for gamma
 p = mySignrank(grpStnMostGamma-grpStnLessGamma);
@@ -475,16 +529,18 @@ plot(tAxis,grpStnMostGammaMean,'Color',[0 109 219]./255)
 plot(tAxis,grpStnLessGammaMean,'Color',[255 109 182]./255);
 fill_between(tAxis,grpStnMostGammaCL(1,:),grpStnMostGammaCL(2,:),tAxis,'FaceColor',[0 109 219]./255,'FaceAlpha',0.2,'EdgeColor','None');
 fill_between(tAxis,grpStnLessGammaCL(1,:),grpStnLessGammaCL(2,:),tAxis,'FaceColor',[255 109 182]./255,'FaceAlpha',0.2,'EdgeColor','None');
-plot(tEvAxis,repmat([-2;2],[1 6]),'k--')
-plot(tAxis,(p<0.05)*0.5,'*');
+plot(tEvAxis,repmat([-2;2],[1 numel(tEvAxis(1,:))]),'k--')
+plot(tAxis(p<(0.05/numel(p))),grpStnMostGammaMean(p<(0.05/numel(p))),'s','MarkerFaceColor',[0 109 219]./255,'MarkerEdgeColor','none')
+plot(tAxis(p<(0.05/numel(p))),grpStnLessGammaMean(p<(0.05/numel(p))),'s','MarkerFaceColor',[255 109 182]./255,'MarkerEdgeColor','none');
 set(gca,'XTick',tEvAxis(1,:),'XTickLabel',{'Hc','To','Vp','Hc','To','Vp','Hc','To'});
-xlim([-0.5 1]);
-ylim([-.5 .5]);
+xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
+% ylim([-.5 .5]);
 % fname = fullfile(getenv('HOME'),'Dropbox','Isaias_group','walking','figs',...
 %     'avgZScoreStrideMod.png');
 
 % print(f2,'-dpng',fname);
 end % function
+
 function [p] = mySignrank(data)
     % data subject x time
     [~,nTimes] = size(data);
@@ -518,7 +574,7 @@ function [confLimit,dataMean] = myBootstrap(data,nSubject,nBootstraps)
 %     A = repmat(dataMean,1,2,1);
     % currBootstrap after mean should be 1 x 2 x f
     % thus we replicate on the first dim
-    confLimit = prctile(currBootstraps,[5 95],1);
+    confLimit = prctile(currBootstraps,[2.5 97.5],1);
 
 end
 
@@ -526,8 +582,8 @@ function [pvalue, unCorrpvalue] = runPermutationTest(obsERSD,stnData,nPermutatio
 %RUNPERMUTATIONTEST Description
 %	PVALUE = RUNPERMUTATIONTEST(STANCE,SWING,NPERMUTATION) Long description
 %
-pvalue  	= zeros(size(obsERSD));
-nSwing  	= size(stnData,1);
+pvalue    = zeros(size(obsERSD));
+nSwing    = size(stnData,1);
 
 dataPerm  = stnData;
 
@@ -549,6 +605,42 @@ for permIdx = 1:nPermutation
     pvalue = pvalue + double(permERSD > obsERSD)./nPermutation;
     
 end
+unCorrpvalue = pvalue;
+pvalue = fdrCorrection(pvalue,0.05);
+
+end
+
+function [pvalue, unCorrpvalue] = runStatisticalValidationERSP(obsERSD,stnData,nPermutation,referenceStance,method)
+
+pvalue = zeros(size(obsERSD));
+
+[nTrials, ~, ~] = size(stnData);
+
+dataPerm  = stnData;
+
+baselineIndexes = referenceStance(1):referenceStance(2);
+nTimeBaseline = numel(baselineIndexes);
+
+% we perform a permutation test for each STN separatelly
+for permIdx = 1:nPermutation
+    
+    % extract baseline samples within trial
+    baselineSamples = stnData(:,baselineIndexes,:);
+    
+    % permute the values in time and trials for each frequency
+    baselineSamples = baselineSamples(randperm(nTrials),randperm(nTimeBaseline),:);
+    
+    % save permuted baseline samples into Permuted Data array
+    dataPerm(:,nTimeBaseline,:) = baselineSamples;
+    
+    % compute permutated statistics
+    permERSD = computeERSD(dataPerm,referenceStance,method);
+    
+    % compute pvalues for all frequencies and all time points.
+    pvalue = pvalue + double(permERSD > obsERSD)./nPermutation;
+    
+end
+
 unCorrpvalue = pvalue;
 pvalue = fdrCorrection(pvalue,0.05);
 
@@ -588,22 +680,34 @@ function stnResult = computeERSD(stnData,referenceStance,method)
 
 % compute the normalization factor concatenating all baseline
 % and computing the mean across trials
-[n,~,f] = size(stnData);
+[n,Time,f] = size(stnData);
 tBaseline = referenceStance(1):referenceStance(end);
 t = numel(tBaseline);
 
-numFactor = mean(mean(stnData(:,tBaseline,:),2));
+numFactor = mean(stnData(:,tBaseline,:),2);
 denFactor = std(reshape(stnData(:,tBaseline,:),[n*t,f]));
 
-if method
-    % rel change
-    stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),numFactor);
-else
-    % pseudo-zscore
-    stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),denFactor);
+% baseline correction
+switch(method)
+    case 1
+        % rel change
+        stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),numFactor);
+    case 2
+        % pseudo-zscore
+        stnResult = bsxfun(@rdivide,bsxfun(@minus,stnData,numFactor),denFactor);
+    case 3
+        % full-trial baseline correction
+        stnResult  = stnData ./ repmat(numFactor,[1 Time 1]);
+%         stnResult  = real(10.*log10(stnResult));
 end
 
 % mean across trials
 stnResult = squeeze(mean(stnResult));
+
+% recompute ERSD
+baseline   = referenceStance(1):referenceStance(2);
+normFactor = mean(stnResult(baseline,:));
+stnResult  = bsxfun(@rdivide, stnResult,normFactor);
+stnResult  = real(10.*log10(stnResult));
 
 end

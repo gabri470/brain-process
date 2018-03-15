@@ -67,7 +67,7 @@ conditionStrings 	= {sInputs.Condition};
 standingConMask = ~cellfun(@isempty,regexp(conditionStrings,'(s|S)tanding'));
 walkingConMask 	= ~cellfun(@isempty,regexp(conditionStrings,'(w|W)alking'));
 restingConMask 	= ~cellfun(@isempty,regexp(conditionStrings,'(r|R)esting'));
-offConMask 			= ~cellfun(@isempty,regexpi(conditionStrings,'off'));
+offConMask 		= ~cellfun(@isempty,regexpi(conditionStrings,'off'));
 montageConMask 	= ~cellfun(@isempty,regexpi(conditionStrings,'visite'));
 
 % order patients in descending order based on dopamine-deplition

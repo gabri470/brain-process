@@ -194,11 +194,11 @@ for fileIdx = fileIndices
     
     for strideIdx = 2:2:numel(evNames)-2
         sizeCheck = strideStart(strideIdx) -399 > 0 & ...
-                strideStart(strideIdx) + 400 <= size(walkingStruct.TF,2);
-            
+            strideStart(strideIdx) + 400 <= size(walkingStruct.TF,2);
+        
         % if the stride contains bad steps
         % we skip it and continue to the next
-%         if ismember(plotIdx,strideRej) || orderCheck(plotIdx) > 0
+        %         if ismember(plotIdx,strideRej) || orderCheck(plotIdx) > 0
         if orderCheck(plotIdx) > 0 || ~sizeCheck
             plotIdx = plotIdx + 1;
             continue;
@@ -216,7 +216,7 @@ for fileIdx = fileIndices
         f 			 = walkingStruct.Freqs(freqMask);
         footLabel 	 = regexp(evNames(strideIdx),'[L|R]','match');
         footLabel	 = footLabel{:}{:};
-        % this is the label of the central event   
+        % this is the label of the central event
         
         if strcmp(footLabel,'L')
             % left foot swing => central to_L
@@ -244,7 +244,7 @@ for fileIdx = fileIndices
                 stnIdx					= 2;
             end
         end
-
+        
         if (sProcess.options.normOnStride.Value)
             % normalize on whole recording/trial
             normFactor = mean(abs(walkingStruct.TF(:,:,freqMask)).^2,2);
@@ -266,14 +266,14 @@ for fileIdx = fileIndices
             subplot(8,2,2*(subjectIdx-1)+stnIdx,'NextPlot','add');
             plot(t,betaMod(controLatIdx,:),'r');
             xlim([-0.2 0.8])
-  
+            
         end
         
         
         fprintf('[%d]',strideIdx);
         fprintf('%s ',evNames{(-1:1) + strideIdx});
         fprintf('\n');
-%        strideRaw	= signals(:,timeWindow)';
+        %        strideRaw	= signals(:,timeWindow)';
         f           = walkingStruct.Freqs(freqMask);
         
         % then create the time-warping vector
@@ -293,35 +293,35 @@ for fileIdx = fileIndices
             % and raw data
             finalRaw(1,:)	 = mixingMatrix * strideRaw(:,1);
             finalRaw(2,:)	 = mixingMatrix * strideRaw(:,2);
-
+            
             tAxis		= referenceTimeVector;
             tEvAxis = repmat(referenceTimeVector(referenceStance([2 3 4])),2, 1);
             
         else
             finalTF 	= dataTF;
             finalRaw	= strideRaw';
-
+            
             tAxis		= (-399:400)/fs;
             tEvAxis 	= repmat(originalVector([3 4 5])./fs,2, 1);
         end
-
-%         % we save for each subject the time-warped ERSD normalized over***
-%         stnRawResults{subjectIdx,stnIdx} = ...
-%             cat(1,stnRawResults{subjectIdx,stnIdx},...
-%             finalTF(controLatIdx,:,:));
-%         
-%         if(~sProcess.options.normOnStride.Value)
-%             finalTF = bsxfun(@rdivide,bsxfun(@minus,finalTF,...
-%                 mean(finalTF(:,referenceStance(2):referenceStance(3),:),2)),...
-%                 std(finalTF(:,referenceStance(2):referenceStance(3),:),[],2));
-%         end
-%         
+        
+        %         % we save for each subject the time-warped ERSD normalized over***
+        %         stnRawResults{subjectIdx,stnIdx} = ...
+        %             cat(1,stnRawResults{subjectIdx,stnIdx},...
+        %             finalTF(controLatIdx,:,:));
+        %
+        %         if(~sProcess.options.normOnStride.Value)
+        %             finalTF = bsxfun(@rdivide,bsxfun(@minus,finalTF,...
+        %                 mean(finalTF(:,referenceStance(2):referenceStance(3),:),2)),...
+        %                 std(finalTF(:,referenceStance(2):referenceStance(3),:),[],2));
+        %         end
+        %
         stnResults{subjectIdx,stnIdx} = cat(1,stnResults{subjectIdx,stnIdx},...
             betaMod(controLatIdx,:));
-%         
-%         
-%         finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
-%         time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
+        %
+        %
+        %         finalTF = finalTF(:,referenceStance(1):referenceStance(end),:);
+        %         time 		= referenceTimeVector(referenceStance(1):referenceStance(end));
         
         plotIdx = plotIdx + 1;
         clear finalTF;
@@ -333,25 +333,25 @@ for fileIdx = fileIndices
 end % for sInputs files
 
 % stnResults holds ERSD for each stride divide as STN-/+
-    
-	stnMeans = cellfun(@nanmean,stnResults,'UniformOutput',false);
-    nSubjects = numel(subjectNameOrdered);
-    figure
-    for subjIdx = 1:nSubjects
-        subplot(8,2,2*(subjIdx-1)+1,'NextPlot','add')
-        plot(t,stnMeans{subjIdx,1},'LineWidth',2,'Color','b');
-        xlim([-0.2 0.8])
-        subplot(8,2,2*(subjIdx-1)+2,'NextPlot','add')
-        plot(t,stnMeans{subjIdx,2},'LineWidth',2,'Color','b')
-        xlim([-0.2 0.8])
-    end
-    
-    A = cat(1,stnMeans{:});
-    A = reshape(A',800,8,2);
-    
-    figure
-    plot(t,squeeze(mean(A,2)));
-    
+
+stnMeans = cellfun(@nanmean,stnResults,'UniformOutput',false);
+nSubjects = numel(subjectNameOrdered);
+figure
+for subjIdx = 1:nSubjects
+    subplot(8,2,2*(subjIdx-1)+1,'NextPlot','add')
+    plot(t,stnMeans{subjIdx,1},'LineWidth',2,'Color','b');
+    xlim([-0.2 0.8])
+    subplot(8,2,2*(subjIdx-1)+2,'NextPlot','add')
+    plot(t,stnMeans{subjIdx,2},'LineWidth',2,'Color','b')
+    xlim([-0.2 0.8])
+end
+
+A = cat(1,stnMeans{:});
+A = reshape(A',800,8,2);
+
+figure
+plot(t,squeeze(mean(A,2)));
+
 %
 %
 %	stnMeans = cellfun(@mean,stnResults,'UniformOutput',false);
@@ -410,12 +410,9 @@ for ii = ord
         runPermutationTest(stnLessAffERSD,...
         stnLessAff,100,referenceStance);
     
-    
     statSignificance = ones(size(pvalue)).*0;
     statSignificance(unCorrPvalue < 0.05) = 0.6;
     statSignificance(pvalue < 0.05) = 1;
-    
-    
     
     subplot(nSubjects*2,2,4*(plotIdx-1)+1,'NextPlot','add')
     
@@ -427,7 +424,6 @@ for ii = ord
     set(gca,'XTickLabel',[]);
     xlim([min(tEvAxis(:)) max(tEvAxis(:))]);
     ylim([6 80]);
-    
     
     subplot(nSubjects*2,2,4*(plotIdx-1)+2,'NextPlot','add')
     h = imagesc(tAxis,f,(stnLessAffERSD.*squeeze(statSignificance(2,:,:)))');
@@ -471,17 +467,17 @@ for ii = ord
     %			plotIdx = plotIdx + 1;
     %
     %
-    fname = fullfile(getenv('HOME'),'Dropbox','Isaias_group',...
-        'walking','figs',strcat(subjectNameOrdered{ii},'_avgZScoreSinVsDouble.png'));
-    
-    
-    
-    print(f2, '-dpng',fname);
+    %     fname = fullfile(getenv('HOME'),'Dropbox','Isaias_group',...
+    %         'walking','figs',strcat(subjectNameOrdered{ii},'_avgZScoreSinVsDouble.png'));
+    %
+    %
+    %
+    %     print(f2, '-dpng',fname);
     
 end
 
-fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
-    'avgZScoreSinVsDouble.ps');
+% fname = fullfile('/','home','lgabri','Dropbox','Isaias_group','walking','figs',...
+%     'avgZScoreSinVsDouble.ps');
 
 %	grPval = nan(size(groupData,2),3,2);
 %	for fIdx= 1:3
